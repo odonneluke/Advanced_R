@@ -1,0 +1,411 @@
+---
+title: "Advanced R - Functions"
+author: "Luke O'Donnell"
+date: "September 10, 2016"
+output: html_document
+---
+
+# __Chapter 6 Functions__  
+  
+### __Exercises__  
+__1. What are the three components of a function?__  
+1. Formal arguments
+2. Body
+3. Environment
+  
+__2. What does the following code return?__
+```{r eval = FALSE}
+y <- 10 
+f1 <- function(x) { 
+  function() {
+    x + 10 } 
+  } 
+
+f1(1)()
+```
+
+`f(1)()` should return 11. You need to make a double function call `()()` as `f1()` is a closure (a function that returns another function)
+
+
+__3. How would you more typically write this code?__
+```{r eval = FALSE}
+`+`(1, `*`(2, 3))
+```
+  
+Both `+` and `*` are infix functions so typically you'd write it as `1 + (2 * 3)`  
+
+
+__4. How could you make this call easier to read?__
+```{r eval=FALSE}
+mean(, TRUE, x = c(1:10, NA))
+```
+Rewritting the call to mean as `mean(x = c(1:10, NA), na.rm = TRUE)` is easier to read  
+  
+  
+__5. Does the following function throw an error when called? Why/why not?__
+```{r eval=FALSE}
+f2 <- function(a, b) {
+  a * 10 
+  } 
+f2(10, stop("This is an error!"))
+```
+  
+No beacuse of the principles of lazy evaluation, argument b will never be evaluated because it is not used
+__6. What is an inﬁx function? How do you write it? What’s a replacement function? How do you write it?__ 
+* Infix functions are functions where the function name comes between the arguments. All user created infix functions must start and end with %.  
+* Replacement  functions are of the form `xxx<-` and act like they modify their arguments in place. They tend to havee two-three arguments (`x`, `value` and `position`).
+__7. What function do you use to ensure that a cleanup action occurs regardless of how a function terminates?__  
+* The function `on.exit`  ensures that certain actions/expression evaluation occur when a function terminates/ends. You can use multiple `on'exit` calls at the termination of a function be specifying `add = TRUE`
+### __Exercises 6.1__   
+  
+__1. What function allows you to tell if an object is a function? What function allows you to tell if a function is a primitive function?__  
+* The `is.function()` function is used to test whether an object is a function or not.
+* The `is.primitive()` function is used to test whether a function is a primitive function or not.
+__2. This code makes a list of all functions in the base package.__
+```{r }
+objs <- mget(ls("package:base"), inherits = TRUE) 
+funs <- Filter(is.function, objs)
+```
+
+__Use it to answer the following questions:__ 
+  
+__a. Which base function has the most arguments?__  
+  
+
+```{r}
+## Obtain a vector of each functions argument lengths
+arg_length <- sapply(funs, function(x) length(formals(x)))
+## Find the index of the function with the most arguments
+max_arg <- which(arg_length == max(arg_length))
+names(funs[max_arg])
+```
+The function is `scan()`
+
+__b. How many base functions have no arguments? What’s special about those functions?__  
+  
+```{r}
+zero_arg <- which(arg_length == 0)
+length(zero_arg)
+```
+There are 225 functions with zero arguments.
+```{r}
+funs_zero <- funs[zero_arg]
+prim_test <- sapply(funs_zero, function(x) is.primitive(x))
+funs_zero_odd <- funs_zero[!prim_test]
+```
+Out of the 225 functions with zero arguments, 183 are primitve functions. Of the remaining 43 functions, 29 are  internal functions. Internal code is built into the R interpretor. It should be noted that not all internal functions have zero arguments, for instance `all.names` has four arguments. 
+  
+Note: infixes, math functions, casts, control flow, system calls and debugging function have no arguments. The majority of these are primitive functions.  
+  
+This examination has shown that while all primitive functions have zero arguments (and no environment or no body), as they contain no R code, __not__ all functions with zero arguments are primitive functions  
+```{r}
+length(formals(all.names))
+```
+
+```{r eval=FALSE, include=FALSE, echo=FALSE}
+##Create a function to check if functions call intenal code or not
+
+calls_internal <- function(f) {
+  body_f <- body(f)
+  any(grepl(".Internal", as.character(body_f)))
+}
+
+funs_internal <- sapply(funs_zero_odd, calls_internal)
+funs_zero_internal <- funs_zero_odd[funs_internal]
+funs_zero_odd <- funs_zero_odd[!funs_internal]
+```
+
+__c. How could you adapt the code to ﬁnd all primitive functions?__  
+```{r}
+prim <- Filter(is.primitive, objs)
+```
+
+__3. What are the three important components of a function?__  
+  
+The 3 components are:
+* The `formals()`, the formal arguments of the function
+* The `body()`, the R code inside the function
+* The `environment()` the location that the functions variables are stored (functions that you create yourself are stored in the global environment)
+  
+__4. When does printing a function not show what environment it was created in?__  
+  
+When the function was created in the global environment.  
+### __Exercises 6.2__  
+__1. What does the following code return? Why? What does each of the three c’s mean?__
+```{r eval=FALSE}
+c <- 10 
+c(c = c)
+```
+ The first `c()` calls the combine function, returning a named double vector with value 10 and name `c`
+ 
+```{r}
+c <- 10 
+c(c = c)
+str(c(c=c))
+```
+
+__2. What are the four principles that govern how R looks for values?__  
+  
+* name masking: determines how R will look for the value of a symbol/variable. If the variable isn't defined inside the current function R will look one level up until it finds it (all the way up to the global enviroment and other loaded packages).  
+  
+The same rules apply when functions are defined within other functions; R will look for the variable's value starting at the last function called and then look one level up at a time until you find the variables value.
+
+* functions vs variables: The same principles of name masking apply regardless of whether the object being searched for is a varaible or a function. However if you are using a name in a context where it is obvious that you want a function (e.g., `f(3)`), R will ignore objects that are not functions while it is searching.
+* a fresh start: Each invocation of a function call is completely independent of previous calls. This is because every time a function is called a new enviroment is created to host execution. This principle can be demonstrated through closures (functions created by other functions.  
+
+```{r}
+f <- function(x) {
+  k <- 5
+  t <- function() {
+    c(x,t)
+  }
+}
+k <- f(1)
+environment(k)
+k <- f(1)
+environment(k)
+```
+Each time `f(1)` is executed the environment changes
+  
+  
+* dynamic lookup: Lexical scoping determines where to look for values, not when to look for them. R looks for values when the function is run, not when it is created. This means that the output of a function can differ depending on objects outside the environment.
+
+  
+__3. What does the following function return? Make a prediction before running the code yourself.__
+```{r eval=FALSE}
+f <- function(x) { 
+  f <- function(x) {
+    f <- function(x) {
+      x ^ 2
+      } 
+    f(x) + 1
+    } 
+  f(x) * 2
+  } 
+f(10)
+
+```
+The function will go down to the lowest level and find `x ^ 2`, so `f(x) <- 100`. R will then arrive at the command `f(x) + 1` and get `100 + 1 = 101` and finally the command `f(x) * 2` will be executed to get `101 * 2 = 202`
+
+### __Exercises 6.4__   
+  
+lazy evaluation: function arguments are only evaluated if they are actually used.   (remember lazy evaluation applies at the time of function definition, not invoation).  
+  
+An unevaluated formal argument is called a __promise__. A promise is made up of two parts:  
+* An expression which gives rise to the delayed computation (i.e `x = 2 * y`)  
+* The enviroment where the expression was created and where it should be evaluated.  
+  
+  
+Until the argument is called there is no _value_ assocaited with the promise. When the argument is called, the stored expression is evaluated in the stored environment, and the result is returned.
+1. Clarify the following list of odd function calls:
+```{r }
+set.seed(2016)
+x <- sample(replace = TRUE, 20, x = c(1:10, NA))
+y <- runif(min = 0, max = 1, n = 20)
+cor(m = "k", y = y, u = "p", x =x)
+```
+  
+* `x <- sample(x = c(1:10, NA), size = 20, replace = TRUE)`  
+* `y <- runif(n = 20, min = 0, max = 1)`
+*  `cor(x, y, use = "p", method = "kendall")`
+```{r}
+set.seed(2016)
+x <- sample(x = c(1:10, NA), size = 20, replace = TRUE)
+y <- runif(n = 20, min = 0, max = 1)
+cor(x, y, use = "pairwise.complete.obs", method = "kendall")
+```
+  
+Function arguments are matched first by exact name (perfect matching), then by partial name matching and finally by position   
+2. What does this function return? Why? Which principle does it illustrate?
+   
+```{r}
+f1 <- function(x = {y <- 1; 2}, y = 0) {
+  
+  x + y
+  }
+
+f1()
+``` 
+  
+* `y` is originally set the value 0, but when x is evaluated, y's default value is overwritten and y now equals 1, while x is set to 2.This means the call to `f1()` will return 3.  
+* The principle demonstrated by this example is lazy evaluation (default value for y  will only be over written if x is actually used).  
+ 
+If x was never evaluated then the value for y would still be zero (due to lazy evaluation). The execution of x overwites the default value for y.  
+  
+
+3. What does this function return? Why? Which principle does it illustrate?
+```{r}
+f2 <- function(x = z) {
+  z <- 100 
+  x
+  } 
+f2()
+
+```   
+* the function returns 100, this is beacuse x has a default value defined by another argument (z)
+* This demonstartes lazy evaluation; lazy evaluation allows you to define the default value of an argument in the terms of another argument or in this case of a variable (z) created within the function.
+* The principles of lexical scoping (name making and dynamic lookup) are also at play here.  
+  
+  
+###  __Exercises 6.5__  
+1. Create a list of all the replacement functions found in the base package. Which ones are primitive functions?  
+```{r}
+objs <- mget(ls("package:base"), inherits = TRUE)
+Funs <- Filter(is.function, objs)
+replace_index <- grep("<-$", names(Funs))
+replace_funs <- Funs[replace_index]
+names(replace_funs) ## These are all of the replacement functions in the base package
+## To find the primitive replacement functions
+
+prim_rpl_funs <- Filter(is.primitive, replace_funs)
+names(replace_funs)
+```
+  
+  
+2. What are valid names for user created inﬁx functions?  
+> "All user defined infix functions must start and end with %"  
+
+3. Create an inﬁx xor() operator.  
+  
+`xor()` means exclusive or (x or y, but not the intercept between x and y).  
+  
+image: ![](https://upload.wikimedia.org/wikipedia/commons/thumb/4/46/Venn0110.svg/1280px-Venn0110.svg.png)   
+```{r}
+`%xor%` <- function(x, y) {
+  (x | y) & !(x & y)
+
+}
+```
+
+4. Create inﬁx versions of the set functions intersect(), union(), and setdiff().
+```{r}
+`%intersect%` <- function(x, y) { 
+   y <- as.vector(y)
+    unique(y[match(as.vector(x), y, 0L)])
+}
+
+`%union%` <- function(x, y) { 
+  unique(c(as.vector(x), as.vector(y)))
+}  
+ 
+`%setdiff%` <- function(x, y) {
+   x <- as.vector(x)
+    y <- as.vector(y)
+    unique(if (length(x) || length(y)) 
+        x[match(x, y, 0L) == 0L]
+    else x)
+}
+```
+
+5. Create a replacement function that modiﬁes a random location in a vector.
+```{r}
+`replace_random<-` <- function(x, value) {
+  ran_pos <- sample(x = seq_along(x), size =  1)
+  x[ran_pos] <- value
+  return(x)
+}
+```
+
+  
+  
+### __Exercises 6.6__
+  
+  
+1. How does the `chdir` parameter of `source()` compare to `in_dir()`? Why might you prefer one approach to the other?  
+```{r eval=FALSE}
+in_dir <- function(dir, code) {
+  old <- setwd(dir) ## setwd returns the current directory, while setting the new working directory to dir
+  on.exit(setwd(old))
+  
+  force(code)
+}
+```
+
+
+* In `source()` the parameter `chdir` temporarily sets the working director to the directory containing the source file. `in_dir` allows you to set the working directory to a new location, not necessarily the directory containing the file. `in_dir()` provides more flexiblility than `chdir` and allows you to temporarily change the working directory to more than one location. However constraining the user can also be sensible, as it can prevent the user from doing something silly unintentionally, and minimise the risk of doing something unintentionally. Constraint can guide the user to use the function as it was intended to be used.
+
+2. What function undoes the action of `library()`? How do you save and restore the values of `options()` and `par()`?   
+* The function `detach()` can remove a package (loaded to the search path by `library()`) from the search path  
+  
+* To save and restore the values of `options()` or `par()` (functions that modify global settings), you can assign the current list of `options()` or `par()` to an object, as `option()` & `par()` invisibly returns the previos settings.  
+  
+```{r}
+## In a script
+
+ops <- options() ## options() invisibly returns a list of all the global options.
+ops$digits
+## lets change the number of digits to print when printing numeric values
+options(digits = 2)
+## lets change the number of digits to print when printing numeric values
+ops$digits
+## Lets restore the default options
+options(ops)
+
+## Or just restore the digit parameter
+options(ops[which(names(ops) == "digits")])
+
+## In a function - use the on.exit() function to return the global settings back to their default/previos state
+digits_print <- function(int) {
+  ops <- options(digits = int)
+  on.exit(options(ops))
+}
+```
+ 
+  
+  
+3. Write a function that opens a graphics device, runs the supplied code, and closes the graphics device (always, regardless of whether or not the plotting code worked).  
+  
+```{r}
+plotter <- function(code) {
+  if (missing(code)) {
+    x <- seq(1:10)
+    y <- runif(10)
+    warning("You did not specify any code, using default plot")
+    
+    return(plot(x,y))
+    
+  } else return(force(code))
+  
+  on.exit(dev.off())
+}
+
+```  
+  
+4. We can use `on.exit()` to implement a simple version of `capture.output()`.
+  
+```{r }
+capture.output2 <- function(code) {
+  temp <- tempfile()
+  on.exit(file.remove(temp), add = TRUE)
+  
+sink(temp)
+on.exit(sink(), add = TRUE)
+
+
+force(code)
+readLines(temp)
+} 
+
+capture.output2(cat("a", "b", "c", sep = "\n"))
+capture.output(cat("a", "b", "c", sep = "\n"))
+```
+  
+Compare `capture.output()` to `capture.output2()`. How do the functions diﬀer? What features have I removed to make the key ideas easier to see? How have I rewritten the key ideas to be easier to understand?  
+  
+The  source code for `capture.output()` is:
+```{r}
+capture.output(cat("a", "b", "c", sep = "\n"))
+capture.output
+```
+
+`capture.output2()` evaluates an expression/code, sends the output to a file and then reads the output back in, with output being returned as a character string.  
+  
+`capture.output()`  evaluates the supplied expression with the output being returned as a character vector or written out to a file (actually the output is always written out to a file). However `capture.output()` gives you the choice of evaluating a number more parameters than `capture.output2()`  
+
+* You can specify the file name or connection to use, otherwise `textConnection()` sets up a default file to write out to. In `capture.output2()` there is no option to choose which file to write the output to.  
+* In `capture.output()` the second call to `on.exit()` overwrites the first call to `on.exit()`, as `add` has not been set to `TRUE` (as in `capture.output2()`)
+* If you specify a file or a connection to write out to, then no value will be returned (actually an invisible `NULL` will be returned, but this as near makes no difference).
+  
+* So the only differenc in functionality between the two functions is that one function will aways return a character string (or error), and the other function can return either a character string or an invisible `NULL`. 
+
+* Overall the code for `capture.output()2` is far more concise and simpler to uderstand than `capture.output()`, without any loss of important functionality. This has been done by removing the for loop (which is very difficult to understand what is happening) with a `force()` function (to evaluate the supplied expression), creating the file to write out to with `temp.file()`

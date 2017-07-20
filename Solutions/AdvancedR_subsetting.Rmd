@@ -1,0 +1,207 @@
+---
+title: "Advanced R - Subsetting"
+author: "Luke O'Donnell"
+
+output: html_document
+---
+# __Chapter 3 Subsetting__  
+  
+###Exercises:  
+  
+  
+__1. What is the result of subsetting a vector with positive integers, negative integers, a logical vector, or a character vector? __   
+* positive integers select elements at specific positions
+* negative integers remove elements at specidic postions
+* logical vectors keep elements at postions corresponding to `TRUE`
+* character vectors select elements with matching names
+  
+  
+__2. What???s the di???erence between [, [[, and $ when applied to a list?__  
+
+*  Subsetting a list by`[` always returns a list, it always preserves the input data structure. You can select more than one element at a time from a list. 
+
+* Subsetting a list by `[[` returns the simplest possible data structure, can only return one element from a list at a time
+
+* `$` is equivalent to `[["name", exact =  FALS]]
+  
+  
+__3. When should you use drop = FALSE?__  
+  
+You should use `drop = FALSE` when you are subsetting a data frame or array and you want to preserve the original dimensions. You should also use it when you are subsetting within a function (less likely to fail).
+  
+  
+__4. If x is a matrix, what does x[] <- 0 do? How is it di???erent to x <- 0?__  
+  
+* `x[] <- 0` replaces every element in the matrix `x` with the value 0, keeping the same dimensions
+```{r}
+mat <- matrix(1:9, nrow = 3)
+mat[] <- 0
+```
+
+* `x <- 0` completely replaces the matrix with the value 0 (returns an atomic vector of length one)
+```{r}
+mat <- matrix(1:9, nrow = 3)
+mat <- 0
+```
+
+  
+  
+__5. How can you use a named vector to relabel categorical variables?__  
+  
+You can use named vector as a look up table, to relabel categorical variables (say changing from a character label to an integer label) 
+```{r}
+lookup <- c("m" = 1, "f" = 2, "i" = 3)
+sex <- c("m", "m", "m", "f", "f", "i", "f", "f")
+lookup[sex]
+## to remove names
+unname(lookup[sex])
+```
+
+  
+#### Exercises 3.1 Data types  
+  
+__1. Fix each of the following common data frame subsetting errors:__  
+
+```{r eval =  FALSE}
+mtcars[mtcars$cyl = 4,]
+mtcars[-1:4, ]
+mtcars[mtcars$cyl <= 5]
+mtcars[mtcars$cyl == 4 | 6, ]
+```
+  
+```{r}
+mtcars[mtcars$cyl == 4,]
+mtcars[-c(1:4),]
+mtcars[mtcars$cyl <= 5, ]
+mtcars[mtcars$cyl == 4 | mtcars$cyl == 6, ] 
+##or
+mtcars[mtcars$cyl %in% c(4,6), ]
+```
+
+
+__2. Why does `x <- 1:5`; `x[NA]` yield 5 missing values? (Hint: why is it di???erent from `x[NA_real_]`?)__   
+  
+* `typeof(NA)` is logical, so `NA` is a logical atomic vector of length one, and is therefore recycled until it is the length as `x` , `length(x) == 5`. Indexing by an `NA` always returns an `NA`, so the value returned is a vector of five `NA`'s.  
+  
+* `typeof(NA_real_)` is a double atomic vector, only logical vectors are recylced, so the returned value is a 'NA' of length 1
+
+
+__3. What does `upper.tri()` return? How does subsetting a matrix with it work? Do we need any additional subsetting rules to describe its behaviour?__
+```{r}
+x <- outer(1:5, 1:5, FUN = "*")
+x[upper.tri(x)]
+```
+From the help page:  
+  
+> Returns a matrix of logicals the same size of a given matrix with entries TRUE in the upper triangle  
+  
+By subsetting `x` with the return value of  `upper.tri(x)`, we're actually performing vector style indexing (matrices and arrays are vectors with a dimension attribute), so we do not need any additional subsetting rules. Because we are subsetting using a matrix using a vector (logical vector in this case), the return value from `x[upper.tri(x)]` will be an atomic vector.
+
+__4. Why does `mtcars[1:20]` return a error? How does it di???er from the similar `mtcars[1:20, ]`?__  
+  
+ * `mtcars[1:20]` is vector notation subsetting, and is asking for the first twenty elements (columns) of the list mtcars  (A data frame is a list where each element is an atomic vector of equal length). In the data frame `mtcar` there are 11 columns not 20, this is why you get an error.
+ * `mtcars[1:20, ]` is array/matrix notation subsetting; this asks for the first 20 across all columns in the data frame `mtcars`, and is allowed because there are 30 rows in the data set.  
+ 
+__5. Implement your own function that extracts the diagonal entries from a matrix (it should behave like `diag(x)` where x is a matrix).__  
+```{r}
+mat <- matrix(9:1, nrow = 3)
+mat
+##Define function to return diagonals from a square matrix
+get_diag <- function(m) {
+  stopifnot( is.matrix(m),nrow(m) == ncol(m))
+  n <- nrow(m)
+  diags <- matrix(seq_len(n), nrow = n, ncol = 2)
+  return(m[diags])
+}
+
+get_diag(mat)
+```
+
+__6. What does `df[is.na(df)] <- 0` do? How does it work?__
+
+* The expression replaces elements with missing values (`NA`s) in the object df with '0' 
+
+* `is.na(df)` returns a logical atomic vector the same length as df, with entries `TRUE` for missing values, and `FALSE` for non-missing values.  
+  
+* When you subset by a logical vector, elements where corresponding logical value is `TRUE` are selected. All elements with missing values are assigned the value 0  
+
+#### Exercises 3.2  Subsetting operators
+
+[[ vs [:
+  
+> If list x is a train carrying objects, then x[[5]] is the object in carriage 5; x[4:6] is a train of carriagess 4-6  
+
+1. Given a linear model, e.g., `mod <- lm(mpg ~ wt, data = mtcars)`, extract the residual degrees of freedom. Extract the R squared from the model summary (`summary(mod)`)
+```{r}
+mod <- lm(mpg ~ wt, data = mtcars)
+
+##To get residual degrees of freedom
+str(mod)
+mod$df.residual ##or
+mod[["df.residual"]]
+mod["df.residual"]
+
+##To get R squared
+str(summary(mod))
+summary(mod)$r.squared
+summary(mod)[["r.squared"]]
+```
+
+  
+#### Exercises 3.3  
+  
+  
+#### Exercises 3.4  
+  
+__1. How would you randomly permute the columns of a data frame? (This is an important technique in random forests.) Can you simultaneously permute therows and columns in one step?__  
+  
+Using the mtcars data set  
+```{r}
+head(mtcars)
+##Randomly permute the columns
+head(mtcars[sample(ncol(mtcars))]) ##subsetting vector notation
+head(mtcars[sample((length(mtcars)))])
+head(mtcars[,sample(ncol(mtcars))]) ##subsetting with array notation
+
+##Randomly permute the rows and columns
+head(mtcars)
+head(mtcars[sample(nrow(mtcars)), sample(ncol(mtcars))])
+```
+
+__2. How would you select a random sample of m rows from a data frame? What if the sample had to be contiguous (i.e., with an initial row, a ???nal row, and every row in between)?__    
+  
+Create a function with two arguments, one argument for the data frame you want to sample from, and another for the size of the sample.
+```{r}
+sample_rows <- function(df, s_size) {
+  sample_index <- sample(nrow(df), s_size)
+  df <- df[sample_index, ]
+  return(df)
+}
+
+sample_rows(mtcars, 2)
+z <- c(1,7)
+
+sample_contiguous_rows <- function(df) {
+  row_index <- sample(nrow(df), 2) ## set beginning and ending rows
+  row_index <- row_index[order(row_index)] ## order min - max
+  print(sprintf("Sampling from row %d - row %d", row_index[1], row_index[2]))
+  df <- df[row_index[1]:row_index[2], ]
+  return(df)
+}
+sample_contiguous_rows(mtcars)
+```
+
+  
+__3. How could you put the columns in a data frame in alphabetical order?__
+
+You can do this by using the `names()` function (or the `colnames()` function) and the `order()` function:
+```{r}
+## Again using the mtcars data set
+head(mtcars)
+
+## Order column names alphabetically
+head(mtcars[ ,order(names(mtcars)) ]) ##or
+head(mtcars[, order(colnames(mtcars))])
+```
+
+  

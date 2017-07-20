@@ -1,0 +1,332 @@
+---
+title: "Advanced R -Functional programming"
+author: "Luke O'Donnell"
+date: "November 19, 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+At it's heart R is a functional programming language (FP). R has what's known as first class functions. You can do anything with functions that you can do with vectors: you can assign them to variables, store them in lists, pass them as arguments to other functions, create them inside functions, and return them as the result of a function. 
+  
+First-class functions: Means that the language treats functions as values – you can assign a function into a variable, pass it around etc. Higher-order functions are functions that work on other functions, meaning that they take one or more functions as an argument and can also return a function.  
+
+# __10.2 Anonymous Functions__  
+  
+
+* In R functions are objetcs and they're not automatically bound to a name. You use the regular assignment operator to give it a name (object names are a property of an environment).  
+* A function without a name is called an anonymous function.  
+* Like all functions, anonymous functions have `formals()`, a `body()` and a parent `environment()`.  
+  
+* You can call an anonymous function in the following way: 
+```{r}
+(function(x) x + 3)(4)
+```
+
+# __Exercises 10.2.1__
+
+1. __Given a function,like "mean", match.fun() lets you ﬁnd a function. Given a function, can you ﬁnd its name? Why doesn’t that make sense in R?__  
+* Functions do not need to have names, they're not automatically bounded to name.  
+* Name binding is a property of an environment. Use `<-`, operator to bind name to a function  
+ 
+2. Use lapply() and an anonymous function to ﬁnd the coeﬃcient of variation( the standardd eviation divided by the mean) for all columns in the mtcars dataset.  
+```{r}
+apply(mtcars, 2, function(x) sd(x)/mean(x))
+```
+  
+  
+3. Use integrate() and an anonymous function to ﬁnd the area under the curve for the following functions. Use Wolfram Alpha (http://www.wolframalpha.com/) to check your answers.
+```{r eval=FALSE}
+1. y = x ˆ 2 - x, x in [0, 10]
+2. y = sin(x) + cos(x), x in [-π, π]
+3. y = exp(x) / x, x in [10, 20]
+```
+```{r}
+#1
+integrate(function(x) x^2 - x , 0, 10)
+#2
+integrate(function(x) sin(x) + cos(x), -pi, pi)
+#3
+integrate(function(x) exp(x)/x, 10, 20)
+```
+
+4. A good rule of thumb is that an anonymous function should ﬁt on one line and shouldn’t need to use {}. Review your code. Where could you have used an anonymous function instead of a named function? Where should you have used a named function instead of an anonymous function?  
+  
+  
+# __10.3 Closures__  
+* Closures are functions created by functions. They are called closures because they __enclose__ the environment of the parent function and can access all its variables.  
+* Closures allow us to have two levels of parameters: a parent level that controls operation and a child level that does the work. e.g.
+```{r}
+power <- function(exponent) {
+  function(x) {
+    x ^ exponent
+  }
+}
+
+square <- power(2)
+square(3)
+cube <- power(3)
+cube(3)
+```
+* The parent function `power()` created two child functions `square()` and `cube()`
+* The main difference between a parent and child functions is the enclosing environment (the `body()` and `formals()` also change).
+```{r}
+environment(power)
+environment(square)
+environment(cube)
+```
+* There are two ways to see the contents of the environment of the child functions
+1. By using `as.list(environment(square))
+2. By using `pryr::unenclose(cube)  
+  
+* The parent environment of a closure is the execution environment of the parent function. Usually the execution envrionment of a function disappears after a value is returned, however when function a returns function b, function b captures ad stores the execution environment of function a and preserves it (functions capture their execution environments).  
+* The only functions that don't have an enclosing environment (environment where the function was created) are primitive functions, which call C code directly and don't have an associated environment.  
+   
+
+## __10.3.1 Function factories__  
+* Function factories are functions that make new functions upon execution i.e they return closures.  
+* you call it with arguments that describe the desired actions, and it returns a function that will do the work for you.  
+  
+Function factories are most useful when:
+* The different levles are more complex, with multiple arguments and complicated bodies.  
+* Some work only needs to be done once, when the function is generated.  
+  
+## __10.3.2 Mutable state__  
+* Having variables at two levels allows you to maintain state across function invocations. This possible because while the exxcution envrionment (of the child) is refreshed every time, the enclosing environment (execution envi of the parent) is constant.  
+* Use `<<-` to manage variables at different levels. The `<<-` keeps looking up the chain of parent environments until it finds a matching name (`<-` always assigns in the current environment).  
+  
+* A static parent envrionment and `<<-` make it possible to maintain state across function calls. This makes it possible to get around the "fresh start" limitation as varaibles are modified in the unchanging parent environment instead of the local environment (execution envrionment of the child). Changes are made to the parent (enclosing), they are preserved across function calls.  
+  
+* Modifying values in a parent environment is one way to generate "mutable state" in R. Mutable state is normally hard because every time it looks like you're modifying an object, you're actually creating a nd then modifying a copy. 
+## __10.3.3 Exercises__
+__1. Why are functions created by other functions called closures?__  
+* They are called closures,because they enclose the environment of the parent function and can access all its variables. 
+  
+__2. What does the following statistical function do? What would be a better name for it? (The existing name is a bit of a hint.)__  
+  
+ 
+```{r}
+bc <- function(lambda) { 
+  if (lambda == 0) {
+    function(x) log(x) 
+    } else { 
+      function(x) (x ^ lambda - 1) / lambda 
+      } 
+  } 
+```
+* The previous function is a function factory as it returns a closure, dependant on the value of the supplied parameter `lambda`. It reurns either the function `log(x)` if `lambda == 0` or the ploynomial `((x ^ lambda) - 1)/lambda` if `lambda != 0`. 
+* this is the __Box-Cox Transformation__, so `box_cox` would be a better name for it.
+__3. What does `approxfun()` do? What does it return?__  
+* Returns a closure that rembers all of the data on which `approxfun()` was called. The returned function then performs linear interpolation on the given input data points. 
+```{r}
+k <- approxfun(1:10, rnorm(10))
+as.list(environment(k))
+```
+
+__4. What does `ecdf()` do? What does it return?__  
+```{r}
+Fn  <- ecdf(1:10)
+Fn(1:10)
+```
+  
+* `ecdf()` is the empirical cumulative distribution. This function is a closure. The child function returns the percentiles of the input vector 
+* `ecdf()` returns a closure generated by the `approxfun()` function  
+  
+__5. Create a function that creates functions that compute the ith central moment (http://en.wikipedia.org/wiki/Central_ moment) of a numeric vector. You can test it by running the following code:__
+
+```{r}
+moment <- function(i) {
+  function(x) {
+    mean((x - mean(x))^i)
+  }
+}
+m1 <- moment(1) 
+m2 <- moment(2)
+x <- runif(100)
+stopifnot(all.equal(m1(x), 0))
+stopifnot(all.equal(m2(x), var(x) * 99 / 100)) 
+stopifnot(all.equal(e1071::moment(x, 2, center = TRUE), var(x) * 99 / 100)) 
+```
+
+6. Create a function pick() that takes an index, i, as an argument and returns a function with an argument x that subsets x with i.
+
+```{r}
+pick <- function(i) {
+  function(x) {
+    x[[i]]
+  }
+}
+lapply(mtcars, pick(5)) 
+# should do the same as this 
+lapply(mtcars, function(x) x[[5]])
+
+all.equal(lapply(mtcars, pick(5)), lapply(mtcars, function(x) x[[5]]))
+```
+  
+  
+# __10.4 Lists of functions__  
+  
+* Functions can be stored i lists. This makes it easier to work with groups of related functions.  
+* Calling a function from a list is straigtforward. you extarct it then call it 
+* To call each function, suing functional programming techniques, use ```lapply()```. We'll need to create an anonymous function or a new named function, since there isn't a built-in function to handle this situation.  
+  
+E.g.
+```{r}
+
+summary <- list(
+   mean = mean,
+   median = median,
+   sd = sd,
+   IQR = IQR
+   
+)
+x <- runif(1e5)
+call_func <- function(f, ...) f(...)
+lapply(summary, function(f) f(x)) 
+lapply(summary, call_func, x)
+## Add parameter to remove missing values
+lapply(summary, call_func, x, na.rm = TRUE)
+lapply(summary, function(f) f(x, na.rm = TRUE)) 
+```
+
+  
+## 10.4.1 Moving lists of functions to the global environment  
+* From time to time you may create a list of function that you want to be available without having to use a special syntax.  
+* You may orginally put your user defined functions into a list, due to their being a risk of conflict between an existing R function, and a function you have created (but don't need to have available all the time).  
+* depending on how long you want the effect to last, you have three options to eliminat the use ```list$function.name```
+   * For a very temporary effect you can use  ```with()```
+   * For a longer term effect, you can ```attach()``` the functions to the search path, then ```detach()``` when you're done
+   * Finally, you could copy the functions to the global environment with ```list2env()```. You can undo this by deleting the functions with ```rm()``` after you're done.
+# __10.4.2 Exercises__    
+  
+__1. Implement a summary function that works like base::summary(), but uses a list of functions. Modify the function so it returns a closure, making it possible to use it as a function factory.__  
+```{r}
+summary(mtcars)
+
+summary_list <- list(
+   "Min." = min,
+   "1st Qu" = function(x) quantile(x, probs = 0.25),
+   "Median" = median,
+   "3rd Qu" = function(x) quantile(x, probs = 0.75),
+   "Max." = max
+   
+)
+
+lapply(mtcars, function(col) sapply(summary_list, function(f) f(col)) )
+## create a function factory
+
+summary_closure <- function(funList) {
+   function(data) {
+      lapply(data, function(col) sapply(funList, function(f) f(col)) )
+   }
+}
+ summary_mtcars <- summary_closure(summary_list)
+ summary_mtcars(mtcars)
+```  
+__2. Which of the following commands is equivalent to `with(x, f(z))`?__  
+  
+(a) x$f(x$z). 
+  
+(b) f(x$z).  
+  
+(c) x$f(z).  
+  
+(d) f(z).  
+  
+(e) It depends.
+  
+* If x is a data frame, it would be ```f(x$z)``, so b. 
+* If x is a list of functions, it would be x$f(z), so c.
+* So it depends on what context of what x is, so I guess (e) is also correct. Likewise if x was a list that was made of functions ```f``` and non-function objects ```z```, then (a) would also be correct, and if the list was attached to the search path, then (d) would be correct as well.  
+  
+# 10.5 Case study: numerical integration    
+  
+# 10.5.1 Exercises  
+  
+1. Instead of creating individual functions (e.g., ```midpoint()```, ```trapezoid()```, ```simpson()```, etc.), we could store them in a list. If we did that, how would that change the code? Can you create the list of functions from a list of coeﬃcients for the Newton-Cotes formulae?
+```{r}
+newton_cotes <- function(coef, open = FALSE) {
+   n <- length(coef) + open
+   function(f, a, b) {
+      pos <- function(i) a + i * (b - a) / n
+      points <- pos(seq.int(0, length(coef) - 1))
+      (b - a)/ sum(coef) * sum(f(points) * coef)
+   }
+}
+## Create a clist of coefficients
+coeffs <- list(
+   closed = list(
+      "trapezoid" = c(1,1),
+      "simpson" = c(1, 4, 1),
+      "simpson38" = c(1, 3, 3, 1),
+      "boole" = c(7,32,12,32,7)
+   ),
+   open = list(
+      "midpoint" = 1,
+      "trapezoid_o" = c(1,1),
+      "milne" = c(2,1,-2),
+      "no_name" = c(11,1,1,11)
+   )
+)
+## create a list of functions
+rules_closed <- lapply(coeffs$closed, function(x) newton_cotes(x))
+rules_open <- lapply(coeffs$open, function(x) newton_cotes(x, open = TRUE))
+rules <- c(rules_closed, rules_open)
+
+composite <- function(f, a, b, n, rule) {
+   points <- seq(a, b, length = n + 1)
+   area <- 0  
+   for (i in seq_len(n)) {
+      area <- area + rule(f, points[i], points[i + 1]) 
+   }
+   area
+}
+## return the area estimate for each rule
+lapply(rules, function(x) composite(sin, 0, pi, n = 10, x))
+
+
+```
+2. The trade-oﬀ between integration rules is that more complex rules are slower to compute, but need fewer pieces. For ```sin()``` in the range [0, π], determine the number of pieces needed so that each rule will be equally accurate. Illustrate your results with a graph. How do they change for diﬀerent functions? sin(1 / xˆ2) is particularly challenging.
+```{r}
+results <- lapply(rules, function(f) sapply(1:5,
+                                            function(i) abs(2 - composite(sin, 0, pi, n = 10^i, f))))
+
+results <- cbind(n = 10^(1:5), as.data.frame(results))
+library(ggplot2)
+library(tidyr)
+library(plyr)
+result_skinny <- gather(results, "rule", "error", 2:9)
+
+ggplot(result_skinny, mapping = aes(x = n, y = error)) +
+   geom_line() +
+   geom_point() +
+   facet_grid(.~rule)+
+   scale_x_log10()+
+   scale_y_log10()
+```
+
+ 
+Viewed graphically we can see that the error decreases linearly with an increase in the number of the iterations. Both Simpson and Boole improve  quicker realtive to the other four methods essentially reaching the limit of machine precision at approximately 100 iterations.
+
+   
+```{r echo = FALSE, include=FALSE, eval=FALSE}
+result_skinny$error_log10 <- with(result_skinny, log10(error))
+result_skinny$n_log_10 <- with(result_skinny, log10(n))
+
+## Fit a linear model
+rulez <- unique(result_skinny$rule)
+skinny_list <- lapply(rulez, function(x) result_skinny[result_skinny$rule == x, c("error_log10", "n_log_10")])
+
+coef_list <- lapply(skinny_list, function(x) coef(lm(formula = x$error_log10 ~ x$n_log_10)) )
+names(coef_list) <- rulez
+coef <- ldply(coef_list)
+colnames(coef) <- c("Rule","Intercept", "Slope")
+
+## predicted number of iterations if error  =1e6
+coef$iter <- (1e-6 - coef$Intercept)/coef$Slope
+
+```
+  
+  

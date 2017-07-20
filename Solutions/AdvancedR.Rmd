@@ -1,0 +1,261 @@
+---
+title: "Advanced R - Data Structures"
+author: "Luke O'Donnell"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# __Chapter 2 -- Data Structures__  
+  
+###Exercises:
+  
+1. __What are the three properties of a vector other than its contents?__ 
+   
+* Type (what it is) ```typeof()```.    
+* Length (how many elements/items it contains) ```length()```.   
+* Attributes (additional arbitrary metadata) ```attr()```.  
+
+2. __What are the four coomon types of atomic vetors? What are the two rare types?__
+Common (from least to most flexible)  
+  
+* Logical  
+* Integer  
+* Double (numeric - floating point number)
+* String  
+
+Rare 
+  
+* Raw  
+* Complex  
+  
+3. __What are attributes? How do get them and set them?__  
+  
+* Attributes store metadata about an object, they can be thought of as a named list.  
+* You can set attributes using ```attr()```  
+* Attributes can be accessed either with ```attr()``` or with ```attributes()```
+  
+4. __How is a list different from an atomic vector? How is a matrix different from a data frame? __ 
+  
+* Both lists and atomic vectors are vectors. Lists differ from atomic vectors in that their elements can be of a different (data) type (character, integer, double, logical etc), while the elements in an atomic vector must be of the same type. Atomic vectors are always flat, while lists can have nested elements (lists, atomic vectors, data frames etc), for this reason lists are often called __recursive__ vectors as a list can contain other lists.  
+* If you attempt to combine different data types in an atomic vector, they will be __coerced__ to the most flexible type. 
+  
+  
+* Similarly all of the elements in a Matrix must have the same type, while data types can differ between columns in a data frame (elements in a column must be the same type though), i.e. Matrices are homogenous whilst data frames can be heterogenous.  
+```{r echo = FALSE}
+library(pander)
+data <- data.frame(Dimensions = c("1d", "2d", "nd"),
+                   Homogenous = c("Atomic vector", "Matrix", "Array"),
+                   Heterogenous = c("List", "Data frame", ""))
+pander(data)
+```
+__*Note*__: R has no 0-dimension scalar objects, Individual numbers or strings, which you might think would be scalars, are actually vectors of length one.
+  
+5. __Can you have a list that is a matrix? Can a data frame have a columns that is a matrix?__
+  
+You can make a 'list-array' or a 'list-matrix' (if `length(dim(list)) == 2`) by adding a dimension attribute to the list, `dim()`.
+```{r}
+ls <- list(1:3, letters[4], 9.7, NA)
+print(ls)
+
+dim(ls) <- c(2, 2)
+ls
+```
+A data frame can have a column that is a matrix, as long as the number of rows in the matrix matches the number of rows in the data frame. There are two ways to do this, with `df$x <- matrix()` or using `I()` when creating a new data frame:  
+
+1.  
+```{r}
+df <- data.frame(x = 1:3)
+df$y <- matrix(1:9, nrow = 3)
+df
+df[, "y"]
+str(df)
+```
+
+2.
+```{r}
+dfm <- data.frame(x = 1:3, y = I(matrix(1:9, nrow = 3)))
+dfm
+str(dfm)
+dfm[, "y"] ## column y is a matrix
+
+```
+
+### Exercises 2.1 Vectors
+
+ __1. What are the 6 types of atomic vector? How does a list differ from an atomic vector?__
+The six types in order of flexibility are
+
+* Character
+* Double (Numeric)
+* Integer
+* Logical
+* Complex
+* Raw
+
+The main differences between an atomic vector and a list are: 
+  
+* The elements of an atomic vector must be the same type (else they are coerced to the most flexible type). The elements in a list can be of different types (including lists.)
+* Atomic vectors are flat, while lists are recursive vectors (lists can be nested within lists).
+  
+ __2. What makes ```is.vector()``` and ```is.numeric()``` fundamentally different to ```is.list()``` and ```is.character()``` ?__ 
+  
+* Both ```is.vector()``` and ```is.numeric()``` are general tests. ```is.vector()``` will return ```TRUE``` for any vector (list, atomic vector) provided the vector has no attributes other than name (does not distinguish between atomic vecotrs and lists).  ```is.numeric()``` will return ```TRUE`` for both integer and double/floating point vectors. 
+* Both ```is.list()``` and ```is.character()``` are tests for specific types. ```is.list()``` will only return ```TRUE``` if the vector is a list and ```is.character()``` will only return ```TRUE``` if the atomic vector is of the type character.
+
+__3. Test your knowledge of vector coercion rules by predicting the output of the following uses of ```c()```__ 
+```{r eval = FALSE}
+#1
+c(1, FALSE)
+#2
+c("a", 1)
+#3
+c(list(1), "a")
+#4
+c(TRUE, 1L)
+
+```
+* 1: The first element is of type double, while the second element is of type logical, double is the more flexible type so the output will coerce to ```double 1, 0``` (```FALSE``` is coerced to 0).  
+* 2 The first element is of type character and the second element is of type double. Character is the more flexible type so the output will be ```character "a", "1"```.  
+* 3: The outer ```c()``` function combines all of the elements into one atomic vector, the most flexible type is charatcer ("a"), so the output will be ```character "1", "a"```.
+* 4 The output will be ```integer 1L, 1L```, as integer types are more flexible than logical types. 
+
+__4. Why do need to use ```unlist( )``` to convert a list to an atomic vector? Why doesn???t ```as.vector()``` work?__  
+  
+* Lists are already vectors, so all ```as.vector()``` will do is remove all attributes other than name from the list. The function ```unlist()``` will simplify the list structure.   
+
+
+__5. Why is `1 == ???1???` true? Why is ```-1 < FALSE``` true? Why is `???one??? < 2` false?__  
+
+* Following the rules of coercion, when two atomic vectors are of differing types, one atomic vector is coerced to the atomic vector with the most flexible type.  
+  
+e.g. 
+  
+*  ```1 == "1"``` is actually comparing `\"1" == "1"`  
+  
+*  ``` -1 < FALSE``` is actually comparing ```-1 < 0```  
+  
+*  ```"one" < 2``` is comparing ```"one" < "2"``` (Hence it is FALSE, as character vectors don't have an order)  
+
+
+__6. Why is the default missing value, ```NA```, a logical vector? What is special about logical vectors?__  
+  
+  
+* Logical vectors are the least flexible data type, hence logical vectors can be coerced to any other type. This means that when you combine an ```NA``` (logical vector) with an  atomic vector of any type, the logical vector will always coerce to the same type as the other atomic vector.
+
+### __Exercises 2.2 Attributes__  
+  
+__1. An early draft used this code to illustrate ```structure()```__
+```{r }
+structure(1:5, comment = "my attribute")
+
+
+```
+__But when you print that object you don't see the comment attribute. Why? Is the attribute missing, or is there something else special about it?__
+
+From the help page for ```?comment``` :  
+
+>  Contrary to other attributes, the comment is not printed (by  print  or  print.default )  
+
+It appears that 'comment' is a special case of an attribute that is not printed (all other attributes print fine)
+
+ __2. What happens when to a factor when you modify its levels?__
+```{r eval  = FALSE}
+f1 <- factor(letters)
+levels(f1) <- rev(levels(f1))
+```
+* When we first create f1, it will print as:
+```{r echo = FALSE}
+f1 <- factor(letters)
+print(f1)
+```
+* calling the ```rev()``` function on f1 results in:
+```{r echo = FALSE}
+levels(f1) <- rev(levels(f1))
+print(f1)
+```
+i.e. Reversing the factor levels, reversed both the order of the atomic vector and the levels.  
+  
+  
+ __3. What does this code do? How do f2 and f3 differ from f1?__
+```{r eval = FALSE}
+f2 <- rev(factor(letters))
+f3 <- factor(letters, levels = rev(letters))
+```
+* In f2 the order of the atomic vector remains the same, but the order of the factor levels is reversed  
+```{r echo = FALSE}
+f2 <- rev(factor(letters))
+f3 <- factor(letters, levels = rev(letters))
+print(f2)
+```
+
+* In f3 the order of the factor levels has been reversed, but not the order of the atomic vector.  
+```{r echo = FALSE}
+print(f3)
+```
+
+### Exercises 2.3 Matries and Arrays
+  
+__1. What does `dim()` return when applied to a vector?__   
+  
+When applied to either an atomic vector or a list (R's 1d data structures), `dim()` returns `NULL`.  
+
+__2. If `is.matrix(x)` is `TRUE`, what will `is.array(x)` return?__  
+  
+`is.matrix()` will also return `TRUE` as matrices are arrays (2d arrays), however the opposite is not true, only 1d or 2d arrays are matrices, `is.matrix()` will return `FALSE` for any array with 3 or more dimensions.  
+
+__3. How would you describe the following three objects? What makes them di???erent to `1:5`?__
+  
+```{r eval = FALSE}
+x1 <- array(1:5, c(1, 1, 5))
+x2 <- array(1:5, c(1, 5, 1))
+x3 <- array(1:5, c(5, 1, 1))
+
+```
+  
+All three objects (x1, x2 and x3) are arrays with 3 dimensions `length(dim()) = 3`, while `1:5` is an atomic vector without a dimension attribute `dim() = NULL`.  
+  
+* x1  has 1 row, 1 column and 5 layers.  
+* x2 has 1 row 5 columns and 1 layer.  
+* x3 has 5 rows, 1 columns and 1 layers.  
+  
+They differ from each other due their dimension attribute
+```{r echo = FALSE}
+x1 <- array(1:5, c(1, 1, 5))
+x2 <- array(1:5, c(1, 5, 1))
+x3 <- array(1:5, c(5, 1, 1))
+
+```
+```{r}
+identical(x1,x3)
+```
+  
+  
+### Exercises 2.4  Data frames 
+  
+__1. What attributes does a data frame possess?__  
+  
+A data frame posses 3 attributes: `names` (same as `col.names`), `row.names` and `class`
+ 
+__2. What does as.matrix() do when applied to a data frame with columns of di???erent types?__
+  
+`as.matrix()` coerces the columns in a data frame to same type, following the rules of coercion (character > double > integer > logical)
+__3. Can you have a data frame with 0 rows? What about 0 columns?__  
+  
+You can have a completely empty data frame, but you cannot have a data frame with 0 rows and > 1 column or a data frame with 0 columns and > 1 row.
+```{r}
+z1 <- c()
+z2 <- c()
+x1 <- data.frame(z1, z2) ##zero rows, 2 columns
+print(x1)
+x2 <- data.frame() ## 0 rows, 0 columns
+print(x2)
+identical(x1, x2)
+## A data frame that has 0 rows has 0 columns....
+```
+
+  
+  
+

@@ -1,0 +1,788 @@
+---
+title: "AdvancedR_functionals"
+author: "Luke O'Donnell"
+date: "December 9, 2016"
+output: html_document
+---
+# __Chapter 11: Functionals
+A higher order function is a function that takes a function as an input or returns a function as output.
+* closures are an example of functionals (they return a function)
+* the family of the ```apply()``` functions are another example of higher order function, as they take a function as an argument and return a vector as output. Higher order functions that take a function as an argument are known as __functionals__.
+
+* Functionals are useful for encapsulating common data manipulation tasks like split-apply-combine, for thinking "functionally", and for working with mathematical functions.
+  
+# 11.1 My first functional ```lapply()```
+  
+ * ```lapply()``` takes a function, and applies it to each element in a list, and returns the results in the form of a list.
+ * ```lapply()``` is written in C for performance.  
+ * ```lapply()``` is really a wrapper for a common for loop pattern: create a container for output, apply ```f()``` to each component of a list, and fill the component with the results.  
+* All other 'for-loop' functionals are variations on this theme.
+
+__Note:__ Data frames are also lists, ```lapply()``` will apply a function to a column in the data frame. If you want use ```lapply()``` on a dataframe and have a data frame returned, do the following: ```df[] <- lapply(df, f)```.
+
+
+## 11.1.1 Looping patterns
+  
+It's useful to remember that there are three basic ways to loop over a vector:
+1. loop over the elements: for (x in xs)
+2. loop over the numeric indices: for (i in seq_along(xs))
+3. loop over the names: for (nm in names(xs))
+
+1. Is not very good for a __for__ loop because it leads to inefficient ways of saving output. In this form output is generally saved by extending out the data structure
+```{r}
+xs <- runif(1e3)
+res <- c()
+for(x in xs) {
+   res <- c(res, sqrt(x)) ## This is slow!!
+}
+```
+
+* This is slow because each time you extend the vector, __R__ has to copy all of the existing elements.3 also suffers from this problem.
+
+It is much better to create the space you'll need for output and then fill it in. this is easiest with the second form
+```{r}
+res <- numeric(length(xs))
+
+for (i in seq_along(xs)) {
+   res[i] <- sqrt(x[i])
+}
+```
+
+
+Just as there are 3 basic ways to use a for loop, there are three basic ways to use ```lapply()```:
+1. ````lapply(xs, function(x))```
+2. ```lapply(seq_along(xs), function(i))```
+3. ```lapply(names(xs), function(nm))```
+  
+Generally you'd use the first form because ```lapply()``` takes care of saving the output for you.    
+  
+# Exercises 11.1
+__1. Why are the following two invocations of ```lapply()``` equivalent?__
+```{r}
+trims <- c(0, 0.1, 0.2, 0.5) 
+x <- rcauchy(100)
+lapply(trims, function(trim) mean(x, trim = trim)) 
+lapply(trims, mean, x = x) 
+
+```
+* Due to how formal arguments are matched to the calling arguments (matching arguments by name in this case), the second ```lapply``` is the same as the first ```lapply``` as in the first the formal argument `trim` is matched to the supplied element of the vector object `trims`, ```trim = trim``` while the secod ```lapply``` matches the formal argument `x` to the vector object `x`, ```x = x```
+  
+  
+__2. The function below scales a vector so it falls in the range [0, 1]. How would you apply it to every column of a data frame? How would you apply it to every numeric column in a data frame?__
+```{r}
+scale01 <- function(x) {
+   rng <- range(x, na.rm = TRUE) 
+   (x - rng[1]) / (rng[2] - rng[1]) } 
+```
+
+```{r}
+head(mtcars)
+mtcars[] <- lapply(mtcars, scale01)
+head(mtcars)
+rm(mtcars)
+```
+
+__3. Use both for loops and lapply() to ﬁt linear models to the mtcars using the formulas stored in this list:__
+```{r}
+
+formulas <- list(
+   mpg ~ disp,
+   mpg ~ I(1 / disp),
+   mpg ~ disp + wt,
+   mpg ~ I(1 / disp) + wt ) 
+
+
+```
+```{r}
+## with a for loop
+mod1 <- vector(mode = "list", length = length(formulas))
+
+for (i in seq_along(formulas)) {
+   mod1[[i]] <- lm(formulas[[i]], data = mtcars)
+}
+print(res)
+## Using lapply
+lapply(formulas, function(frm) lm(formula = frm, data = mtcars))
+```
+
+__4. Fit the model mpg ~ disp to each of the bootstrap replicates of mtcars in the list below by using a for loop and lapply(). Can you do it without an anonymous function?__
+```{r}
+bootstraps <- lapply(1:10, function(i) {
+   rows <- sample(1:nrow(mtcars), rep = TRUE) 
+   mtcars[rows, ] 
+   }) 
+```
+
+```{r}
+## with a for loop
+mod2 <- vector("list", length(bootstraps))
+for (i in seq_along(bootstraps)) {
+   mod2[[i]] <- lm(mpg ~ disp, data = bootstraps[[i]])
+   
+}
+## lapply
+lapply(bootstraps, function(bt) lm(mpg ~ disp, bt))
+## without an anonymouse function
+lapply(bootstraps, lm, formula = mpg ~ disp)
+```
+
+__5. For each model in the previous two exercises,extract R2 using the function below.__
+```{r}
+rsq <- function(mod) summary(mod)$r.squared
+
+
+lapply(mod1, rsq)
+lapply(mod2, rsq)
+```
+  
+  
+    
+# 11.2 For loop functionals: friends of ```lapply()```
+  
+## 11.2. Vector output: ```sapply()``` and ```vapply()```
+  
+ * Both ```sapply()``` and ```vapply()``` are very similiar to ```lapply()``` except they simplify their output  to
+ produce an atomic vector.
+ * while ```sapply()``` guesses at the output  type (logical, character, integer, double), ```vapply()``` takes an additional argument specifying the type.
+   
+```sapply()``` is better for interactive use,because it saves typing, while ```vapply()``` is better for use inside functions, because it won't fail silently and gives better error messages.  
+* when given an empty list, ```sapply()``` returns another empty list, while ```vapply()``` will return the more correct zero-length vector (logical, character, integer, double).  
+* If the function results of different types or lengths, ```sapply()``` will silently return a list, while ```vapply()``` will return an error  
+  
+## 11.2.2 Multiple inputs: ```Map()``` and ```mapply()```  
+  
+* For ```Map()``` all of the ```...``` arguments can vary. The first argument for ```Map()``` is function.
+* ```Map()``` is useful for when you have two (or more) lists (or data frames) that you need to process in parallel.  
+  
+ * ```mapply()```, ```Map()``` is the equivalent of ```mapply()``` with ```simplify = FALSE```, which is almost always want you want. 
+* The function given to map can also be an anonymous function, this is handy if some of the arguments need to be fixed.   
+## 11.2.4 Parallelisation
+*  Because each iteration is independent from all others in ``lapply()```, the order in which they are computed doesn't matter.
+* Because we can compute each element in any order, it's easy to dispatch the tasks to different cores and compute them in parallel. This is what ```parallel::mclapply()``` and ```parallel::mcMap()``` does.  
+  
+* However when the cost of each individual computation is low, sometimes the parallel versions of the ```apply``` functions can be slower, this is because additional work is needed to send the computation to the different cores and to collect the results.  
+* While increasing the number of cores will not always lead to linear improvement, switching from ```lapply()``` or ```Map()``` to its parallel version can dramaticall improve computational performance.
+  
+# 11.2 Exercises  
+  
+__1. Use vapply() to:__
+   __a) Compute the standard deviation of every column in a numeric data frame.__
+```{r}
+vapply(mtcars, is.numeric, FUN.VALUE = logical(1))
+## mtcars is a numeric data frame
+vapply(mtcars, sd, FUN.VALUE = numeric(1))
+```
+
+   __b) Compute the standard deviation of every numeric column in a mixed data frame. (Hint: you’ll need to use vapply() twice.)__ 
+```{r}
+
+
+vapply(iris[vapply(iris, is.numeric, FUN.VALUE = logical(1))], sd, numeric(1))
+```
+
+__2. Why is using sapply() to get the class() of each element in a data frame dangerous?__
+This is because the number of ```class()``` values may not be the same for each element in a data frame. If you expect each element to have one and only one ```class``` then you would expect a character vector to be returned, however is one of the elements has two or more ```class's``` then the structure cannot be simplified and a list will be returned (simplification can only occur is each element is the same type and length). Using ```vapply()``` is such a scenario will be more robust as an error will be returned when the results don't conform to expectations.
+__3. The following code simulates the performance of a t-test for non-normal data. Use sapply() and an anonymous function to extract the p-value from every trial.__
+```{r}
+trials <- replicate( 
+   100, 
+   t.test(rpois(10, 10),
+          rpois(7, 10)),
+   simplify = FALSE 
+   ) 
+```
+
+```{r}
+sapply(trials, function(trial) trial$p.value)
+## Extra challenge: get rid of the anonymous function
+## by using [[ directly
+sapply(trials, `[[`, "p.value")
+```
+
+__4. What does replicate() do? What sort of for loop does it eliminate? Why do its arguments diﬀer from lapply() and friends?__
+  
+* ```replicate()``` is a wrapper around ```sapply()``` for the repeated evaluation of an expression (usually for random number generation). Basically it will evaluate an expression ```expr``` n times.  
+* It eliminates the use of the repeat control flow statements or for loop statements that loop of the numeric indices of a vector, but repeatedly evaluate the exact same expression ach iteration.
+* The arguments differ from ```lapply()``` because the exact same expression is evaluated each iteration, all of the arguments in the expression are fixed, while in ```lapply()``` one argument varies each iteration.
+```{r}
+trials <- replicate( 
+   100, 
+   t.test(rpois(10, 10),
+          rpois(7, 10)),
+   simplify = FALSE 
+   ) 
+
+## is equivalent to
+trials <- vector("list", length = 100)
+
+for (i in seq_len(100)) {
+   trials[[i]] <- t.test(rpois(10, 10), rpois(7,10))
+   
+}
+```
+
+__5. Implement a version of lapply() that supplies FUN with both the name and the value of each component.__ 
+```{r}
+mylapply <- function(x, f, ...) {
+   res <- vector("list", length = length(x))
+   names(res) <- names(x)
+   
+   for (name in names(x)) {
+      res[[name]] <- f(x[[name]], name, ...)
+      
+   }
+   return(res)
+}
+## Or using Map()
+
+mylapply <- function(x, f, ...) {
+   Map(f, x, names(x), ...)
+}
+
+funtest <- function(name, val){
+  paste("the value of", name, "is", val)
+}
+colnum <- c("blue" = 2, "green" = 7)
+
+mylapply(colnum, funtest)
+``` 
+__6. Implement a combination of ```Map()``` and ```vapply()``` to create an ```lapply()``` variant that iterates in parallel over all of its inputs and stores its outputs in a vector (or a matrix). What arguments should the function take?__   
+```{r}
+## I think this is what the quesion means, hard to know what is meant by `parallel`
+
+xs <- replicate(5, runif(10), simplify = FALSE)
+ws <- replicate(5, rpois(10, 5) + 1, simplify = FALSE)
+
+vMap <- function(f, FUN.VALUE , ...) {
+   out <- Map(f, ...)
+   vapply(out, identity, FUN.VALUE)
+}
+mcvMap(weighted.mean, numeric(1), xs, ws)
+```  
+__7. Implement ```mcsapply()```, a multicore version of ```sapply()```. Can you implement ```mcvapply()```, a parallel version of vapply()? Why or why not?__
+```{r}
+library(parallel)
+mcsapply <- function(x, f, ...,mc.cores = 1L, simplify = TRUE, USE.NAMES = TRUE) {
+   FUN <- match.fun(f)
+   res <- mclapply(x, FUN, mc.cores = mc.cores)
+   if (USE.NAMES && is.character(x) && is.null(names(res))) {
+      names(res) <- names(x)
+   }
+   if (!identical(simplify, FALSE) && length(res)) {
+      simplify2array(res, higher = (simplify == "array"))
+   } else res
+   
+      
+}
+```
+* You cannot implement a parallel version of ```vapply()``` this is because unlike ```sapply()```, ```vapply()``` is not simply a wrapper around the ```lapply()``` function, instead it is an implementation of the ```lapply()``` for loop pattern that assigns the results to a homogenous vector or array of the appropriate type, instead of a list.  
+  
+# 11.3 Manipulating matrices and data frames 
+  
+## 11.3.1 Matrix and array operations  
+  
+The function ```apply()``` is a variant of ```sapply()``` that works with matrices and arrays. You can think of it as an operation that summarises a matrix or array by collapsing each row or column to a single number.  
+It has four arguments:  
+* ``` X```, the matrix or array.
+* ```MARGIN```, an integer vector giving the dimesions to summarise over, 1 = rows, 2 = columns, etc
+* ```FUN```, a summary function
+* ```...``` other arguments to pass on to ```FUN```.
+  
+* ```apply()``` doesn't have a simplify function argument so you can never sure what data structure you'll get as output.
+* It is also not idempotent in the sense that if the summary function is the ```identity()``` function, the output is not always the same the as input.  
+__NOTE:__ the output of  the ```identity()``` function  is the same as it's input.
+  
+  
+The function ```sweep()``` allows you to "sweep" out the values of a summary statistic  
+```{r}
+(med.att <- apply(attitude, 2, median))
+attitude
+
+sweep(data.matrix(attitude), 2, med.att)  # subtract the column medians from each row
+```  
+  The function ```outer()``` takes multiple vector inputs and creates a matrix or array as output, where the input function is run over every combination of the inputs:
+```{r}
+outer(1:3, 1:10, "*")
+## row 1 is 1 * 1:10
+## row 2 is 2 * 1:10
+# ...
+## or
+1:3 %o% 1:10
+```
+
+  
+## 11.3.2 Group apply  
+  
+The function ```tapply()``` can be thought about as a generalisation to ```apply()``` that allows for "ragged" arrays, arrays where each row can have a different number of columns
+```{r}
+pulse <- round(rnorm(22, 70, 10 / 3)) + rep(c(0, 5), c(10, 12)) 
+group <- rep(c("A", "B"), c(10, 12))
+tapply(pulse, group, length) 
+tapply(pulse, group, mean) 
+```
+
+```tapply()``` works by creating a "ragged" data structure from a set of inputs, and then appling a function to the individual elements of that structure. The first task is what the ```split()``` function does. It takes two inputs and returns a list which groups elements together from the first vector according to elements, or categories from the second vector
+```{r}
+split(pulse, group)
+```
+This means that ```tapply()``` is really just a combination of ```split()``` and ```sapply()```.
+  
+## 11.3.3 The plyr package  
+  
+  
+# 11.3.4 Exercises  
+__1. How does apply() arrange the output? Read the documentation and perform some experiments.__   
+According to the documentation for ```apply()``` if each call to ```FUN``` returns a vector of length n, then ```apply()``` returns an array with dimension ```c(n, dim(X)[MARGIN])``` when n > 1.
+
+  
+If n = 1 then ```apply``` returns an atomic vector (with length equal to the length of the specified margin) if ```MARGIN``` has length 1 and an array with dimension ```dim(X)[MARGIN]```
+```{r}
+dim(mtcars)
+dim(mtcars)[1]
+# apply(mtcars, 1, mean)
+dim(mtcars)[2]
+apply(mtcars,2, mean)
+
+
+z <- array(1:24, dim = 2:4)
+dim(z)[1]
+apply(z, 1, mean)
+dim(z)[1:2]
+apply(z, 1:2, mean)
+dim(z)[2:1]
+apply(z, 2:1, mean)
+
+```
+
+__2. There’s no equivalent to split() + vapply(). Should there be? When would it be useful? Implement one yourself.__
+  
+In general no, this is because each element of the output must be the same type and length, and in general you may not have the same number of elements in each of the groups (```vapply()``` would require each group to have the same number of observations). This may be useful in an analysis where you expect a balanced design, as this type of function will detect where data from an unbalanced design has been passed in (model parameters/assumptions differ between a balanced and unbalanced design, so they need to be treated differently).
+```{r}
+
+pulse <- round(rnorm(22, 70, 10 / 3)) + rep(c(0, 5), c(10, 12)) 
+group <- rep(c("A", "B"), c(10, 12))
+
+split_vapply(x, group, fun, fun.value, ...) {
+   pieces <- split(x, group)
+   vapply(pieces, fun, FUN.VALUE = fun.value, ...)
+}
+```
+
+__3. Implement a pure R version of split(). (Hint: use unique() and subsetting.) Can you do it without a for loop?__ 
+```{r}
+rsplit <- function(x, group) {
+   types <- unique(group)
+   out <-lapply(types, function(type) {
+      x[group == type]
+      
+})
+   names(out) <- types
+   return(out)
+}
+```
+
+__4. What other types of input and output are missing? Brainstorm before you look up some answers in the plyr paper__ 
+
+
+
+# 11.4 Manipulating lists  
+  
+Functionals provide a general set of tools for altering, subsetting and collapsing lists. Every functional programming language has three tools for this: ```Map()```, ```Reduce()```, and ```Filter()```.  
+* ```Map()```:a variant of ```lapply()``` where all the arguments can vary
+* ```Reduce()``` a powerful tool for extending two argument functions
+* ```Filter()```, a member of an important class of functional that work with __predicates__, functionals that return a single ```TRUE``` or ```FALSE```.  
+  
+## 11.4.1 ```Reduce()```  
+  
+```Reduce()``` reduces a vector, x, to a single value by recursively calling a function, ```f```, two arguments at a time. It combines the first two elements with ```f```, then combines the result of that call with the third element, and so on.  
+  
+* Calling ```Reduce(f, 1:3)``` is equivalent to ```f(f(1, 2), 3).  
+```{r}
+Reduce(`+`, 1:3) # ((1 + 2) = 3)
+Reduce(sum, 1:3) # sum(sum(1, 2), 3)
+
+## The essence of Reduce can described by a simple for loop:
+
+Reduce2 <- function(f, x) {
+   out <- x[[1]]
+   
+   for(i in seq(2, length(x))) {
+      out[[i]] <- f(out, x[[i]])
+   }
+   return(out)
+}
+```
+* ```Reduce()``` is a nice way of extending a function that works with two inputs to one that can deal with any number of inputs. It's useful for implementing many types of recursive opertaions such as ```merge()`` and ```intersect()```  
+  
+  
+
+```{r}
+df1 <- data.frame(a = letters[1:10], b = rnorm(10, 0, 1))
+df2 <- data.frame(a = letters[1:10], c = rt(10, df = 2))
+df3 <- data.frame(a = letters[1:10], d = rpois(10 , 1))
+
+Reduce(merge,list(df1, df2, df3)) ## merge(merge(df1, df2), df3)
+
+(lst <-replicate(n = 5, expr = sample(1:10, 15, replace = TRUE), simplify = FALSE))
+## Find the values that occur in every element
+Reduce(intersect, lst) ## intersect(intersect(intersect(intersect(lst[[1]], lst[[2]]), lst[[3]]), lst[[4]]), lst[[5]])
+
+## Using Reduce makes this task much easier to read
+```
+  
+## 11.4.2 Predicate functionals  
+A __predicate__ is a function that returns boolean vector (TRUE or FALSE) of length 1.
+* Examples are ```is.character()```, ```is.data.frame()```, ```all()```, ```any()```.
+* A predicate functional applies a predicate function to each element in a list or data frame.  
+  
+R has three useful predicate functionals in it's base package: ```Filter()```, ```Find()````, and ```Position()```  
+* ```Filter()``` selects only those elements which match the predicate.
+* ```Find()``` returns the first element which matches the predicate (or the last if ```right = TRUE```)
+* ```Position()``` returns the index of the first element that matches the prediate (or the last if ```right = TRUE```).  
+  
+Another useful predicate functional is ```where()```, a custom functional generates a logical vector form a list (or data frame) and a predicate.  
+```{r}
+where <- function(f, x) {
+   vapply(x, f, FUN.VALUE = logical(1))
+}
+```
+  
+The following example shows how you might use these functionals with a data frame:
+```{r}
+df <- data.frame(x = 1:3, y = c("a", "b", "c"))
+
+where(is.factor, df)
+Filter(is.factor, df)
+Find(is.factor, df)
+Position(is.factor, df)
+```
+# 11.4.3 Exercises
+__1. Why isn’t is.na() a predicate function? What base R function is closest to being a predicate version of is.na()?__ * ```is.na()``` does not return a logical vector of length one, it's output length is equal to the length of the input vector
+* the function ```anyNA()``` is a predicate for ```is.na()```, it wraps the ```any()```(predicate) function around ```is.na()```
+__2. Use Filter() and vapply() to create a function that applies a summary statistic to every numeric column in a data frame.__   
+```{r}
+summaryApply <- function(df, f) {
+  vapply(Filter(is.numeric, df), f, numeric(1))
+}
+
+summaryApply(mtcars, median)
+summaryApply(iris, mean)
+```  
+__3. What’s the relationship between which() and Position()? What’s the relationship between where() and Filter()?__
+* ```Position(f, x)``` is equivalent to ```which(f(x))[1]```. ```Postion()``` returns the index of the first ```TRUE```; which returns the indexes of all ```TRUE``'s
+```{r}
+scramble <- sample(1:5, size = 50, replace = TRUE)
+Position(function(x) x == 1, scramble)
+which(scramble == 1)
+which(scramble == 1)[1]
+```
+
+* ```Filter(f, x)``` is equivalent to ```x[where(f, x)]```
+```{r}
+Filter(function(x) x >= 3, scramble)
+scramble[where(function(x) x >= 3, scramble)]
+
+```
+
+__4. Implement Any(), a function that takes a list and a predicate function, and returns TRUE if the predicate function returns TRUE for any of the inputs. Implement All() similarly.__
+ 
+```{r}
+myAny <- function(f, lst) {
+   test <- vapply(lst, f, logical(1))
+   if (length(which(test)) >= 1) TRUE
+   else FALSE
+}
+myAny(function(x) x >= 6, scramble)
+myAny(function(x) x >= 5, scramble)
+myAll <- function(f, lst) {
+   test <- vapply(lst, f, logical(1))
+   if (length(which(test)) == length(lst)) TRUE
+   else FALSE
+}
+
+myAll(function(x) x >= 1, scramble)
+myAll(function(x) x >= 2, scramble)
+
+## Second implementation, where x == logical vector
+Any <- function(x) {
+   Reduce(`|`, x, FALSE)
+}
+
+Any(scramble > 1)
+Any(scramble > 6 )
+All <- function(x) {
+   Reduce(`&`, x, TRUE)
+}
+
+All(scramble > 3)
+All(scramble <= 5)
+```
+  
+__5. Implement the span() function from Haskell: given a list x and a predicate function f, span returns the location of the longest sequential run of elements where the predicate is true. (Hint: you might ﬁnd rle() helpful.)__
+```{r}
+thirty30 <- replicate(50, sample(list("thirty",30), size = 1, prob = c(0.7, 0.3)))
+
+
+rspan <- function(f, x) {
+   runs <- rle(vapply(x, f, logical(1)))
+   runs_length <- length(runs$values)
+   pos <- 0
+   max_pos <- NA
+   max_length <- 0
+   
+   for (i in seq_len(runs_length)) {
+      
+      pos <- pos + runs$lengths[[i]]
+      
+      if (runs$values[[i]] && runs$lengths[[i]] > max_length) {
+         max_pos <- pos - (runs$lengths[[i]] - 1)
+         max_length <- runs$length[[i]]
+      }
+   }
+   return(max_pos)
+}
+rspan(is.numeric, thirty30)
+
+
+
+```
+
+# 11.5 Mathematical functionals
+* ```integrate()``` finds the area under the curve defined by ```f()```
+* ```uniroot()``` finds where ```f()``` hits zero
+* ```optimise()``` finds the location of lowest (or highest) value of ```f()```  
+  
+# 11.5.1 Exercises  
+  
+__1. Implement ```arg_max()```. It should take a function and a vector of inputs, and return the elements of the input where the function returns the highest value. For example, ```arg_max(-10:5, function(x) x ˆ 2)``` should return -10. ```arg_max(-5:5, function(x) x ˆ 2)``` should return ```c(-5, 5)```. Also implement the matching ```arg_min()``` function.__   
+```{r}
+arg_max <- function(f, x) {
+   eval <- vapply(x, f, numeric(1))
+   x[which(eval == max(eval))]
+}
+arg_max(-5:5, function(x) x^2)
+arg_max(-10:5, function(x) x^2)
+
+arg_min <- function(f, x) {
+   eval <- vapply(x, f, numeric(1))
+   x[which(eval == min(eval))]
+}
+```
+  
+# 11.6 Loops that should be left as is  
+  
+Some loops have no natural functional equivalent. Three common cases are:  
+  
+* modifying in place
+* recursive functions
+* while loops  
+  
+## 11.6.1 Modifying in place  
+  
+If you need to modify part of an existing data frame, it's often better to use a for loop. For example, the following code performs a variable-by-variable transformation by matching the names of a list of functions to the names of variables in a data frame.  
+  
+```{r}
+head(mtcars)
+trans <- list(
+   disp = function(x) x * 0.163871,
+   am = function(x) factor(x, labels = c("auto", "manual"))
+)
+
+for (var in names(trans)) {
+   mtcars[[var]] <- trans[[var]](mtcars[[var]])
+}
+
+head(mtcars)
+```  
+  
+    
+## 11.6.2 Recursive functions  
+  
+It's hard to convert a for loop into a functional when the relationship between elements is not independent, or is definded recursively. For example, exponential smooting works by taking a weighted average of the current and previous data points. The ```exps()``` function below implements exponential smoothing with a for loop.  
+  
+```{r}
+exps <- function(x, alpha) {
+   s <- numeric(length(x) + 1)
+   for (i in seq_along(s)) {
+      if (i == 1) {
+         s[i] <- x[i]
+         
+      } else {
+         s[i] <- alpha * x[i - 1] + (1 - alpha) * s[i - 1]
+      }
+   }
+   return(s)
+}
+(x <- runif(6))
+exps(x, 0.5)
+```
+We can't eliminate the for loop because none of the functionals we've seen allow the output at postions ```i``` to depend on both the input and the output at position ```i - 1```
+## While loops
+Another type of looping construct is the ```while``` loop. It keeps running until some condition is met. ```while``` loops are more general than ```for``` loops: you can rewrite every ```for``` loop as a ```while``` loop, but you can't do the reverse. 
+
+# 11.7 A family of functions  
+  
+# 11.7 Exercises  
+  
+__1. Implement smaller and larger functions that, given two inputs, return either the smaller or the larger value. Implement `na.rm = TRUE`: what should the identity be? (Hint: ```smaller(x, smaller(NA, NA, na.rm = TRUE), na.rm = TRUE)``` must be x, so ```smaller(NA, NA, na.rm = TRUE)``` must be bigger than any other value of x.) Use ```smaller``` and ```larger``` to implement equivalents of ```min()```, ```max()```, ```pmin()```, ```pmax()``, and new functions ```row_min()``` and ```row_max()```.__  
+```{r}
+rm_na <- function(x, y, identity) {
+   if (is.na(x) && is.na(y)) identity
+   else if (is.na(x)) y
+   else x
+}
+
+smaller <- function(x, y, na.rm = TRUE) {
+   stopifnot(length(x) == 1,  length(y) == 1)
+   if (na.rm && (is.na(x) || is.na(y))) rm_na(x, y, Inf)
+   else if (x < y) x
+   else y
+}
+
+smaller(2, 3)
+smaller(3, NA)
+smaller(NA, NA)
+
+bigger <- function(x, y, na.rm = TRUE){
+   stopifnot(length(x) == 1,  length(y) == 1)
+   if (na.rm && (is.na(x) || is.na(y))) rm_na(x, y, -Inf)
+   else if (x > y) x
+   else y
+}
+
+bigger(3, 2)
+bigger(3, NA)
+bigger(NA, NA)
+## Use smaller() & Reduce() to implement a new version of min() 
+min_2 <- function(xs, na.rm = TRUE) {
+   Reduce(function(x, y) smaller(x, y, na.rm = na.rm), xs, init = Inf)
+}
+min_2(1:10)
+min_2(10:1)
+min_2(NA)
+
+## use bigger() & Reduce() to implement a new version of max()
+max_2 <- function(xs, na.rm = TRUE) {
+   Reduce(function(x, y) bigger(x, y, na.rm = na.rm), xs, init = -Inf)
+}
+
+max_2(1:10)
+max_2(NA)
+
+## Use smaller() & Map to implement a new version of pmin() (vectorised min())
+
+pmin_2 <- function(xs, ys, na.rm = TRUE) {
+   stopifnot(length(xs) == length(ys), is.numeric(xs), is.numeric(ys))
+   if (length(xs) == 0 | length(ys) == 0) return(numeric())
+   simplify2array(
+      Map(function(x, y) smaller(x, y, na.rm = na.rm), xs, ys)
+   )
+}
+pmin_2(5:1, 1:5)
+all(pmin_2(1:5, 5:1) == pmin(1:5, 5:1))
+pmin_2(numeric(), numeric())
+pmin_2(c(1, NA), c(2, NA))
+
+## Use bigger() & Map() to implement a new version of pmax()
+pmax_2 <- function(xs, ys, na.rm = TRUE) {
+   stopifnot(length(xs) == length(ys), is.numeric(xs), is.numeric(ys))
+   if (length(xs) == 0 | length(ys) == 0) return(numeric())
+   simplify2array(
+      Map(function(x, y) bigger(x, y, na.rm = na.rm), xs, ys)
+   )
+}
+pmax_2(5:1, 1:5)
+pmax_2(numeric(), numeric())
+pmax_2(c(1, NA), c(2, NA))
+
+## use smaller() & apply() to implement row_min()
+row_min <- function(x, na.rm = TRUE) {
+   apply(x, 1, smaller, na.rm = na.rm)
+}
+
+## use bigger & apply() to implement row_max()
+row_max <- function(x, na.rm) {
+   apply(x, 1, bigger, na.rm = na.rm)
+}
+```  
+  
+  
+2. Create a table that has _and_, _or_, _add_, _multiply_, _smaller_, and _larger_ in the columns and _binary operator_, _reducing variant_, _vectorised variant_, and _array variants_ in the rows.  
+
+
+a) Fill in the cells with the names of base R functions that perform each of the roles.   
+```{r}
+col_names <- c("and", "or", "add", "multiply", "smaller", "bigger")
+row_names <- c("binary operator", "reducing variant", "vectorised variant", "array variant")
+and <- c("&&", "all()", "intersect() or &", "")
+or <- c("||", "any()", "union() or |", "")
+add <- c("+", "sum()", "+", "colSums(), rowSums()")
+multiply <- c("*", "prod or %*% for matrices", "*", "")
+smaller <- c("< or > or min", "min", "pmin", "")
+bigger <- c("< or > or max", "max", "pmax", "")
+DT <- data.table(and, or, add, multiply, smaller, bigger)
+setnames(DT, col_names)
+
+```  
+b) Compare the names and arguments of the existing R functions. How consistent are they? How could you improve them?  
+
+c) Complete the matrix by implementing any missing functions. 
+```{r}
+## multiply array
+prod_array <- function(x, dim, na.rm = FALSE) {
+   apply(x, dim, prod, na.rm = na.rm)
+}
+
+## smaller array
+min_array <- function(x, dim, na.rm = FALSE) {
+   apply(x, dim, min, na.rm = na.rm)
+}
+
+## bigger array
+
+max_array <- function(x, dim, na.rm = FALSE) {
+   apply(x, dim, max, na.rm = na.rm)
+}
+
+## Or array
+union_array <- function(x, dim, na.rm = FALSE) {
+   apply(x, dim, union, na.rm = na.rm)
+}
+## And array
+intersect_array <- function(x, dim, na.rm = FALSE) {
+   apply(x, dim, intersect, na.rm = na.rm)
+}
+
+
+```   
+3. How does ```paste()``` ﬁt into this structure? What is the scalar binary function that under lies ```paste()```? What are the ```sep``` and ```collapse``` arguments to ```paste()``` equivalent to? Are there any paste variants that don’t have existing R implementations?  
+
+* There is no scalar binary function that underlies ```paste```. ```paste``` has behaviour eqivalent to both a vectorised function and reducing function.
+  
+* ```paste()``` paste concatenates to vectors together after converting them into a character vector. Depending on what arguments you supply to it, and whether you use ```collapse``` or ``sep`` will determine whether paste behaves as a vectorised or reducing function
+
+
+* If the arguments supplied to  ```paste()``` are length one, then the  ```sep``` argument causes paste to behave similiar to a binary operator
+```{r}
+paste("a", "b", "c", sep = "")
+```
+* When the arguments are greater than length one, the ```sep``` argument means paste behaves like a vectorised function
+```{r}
+paste(letters, LETTERS)
+```
+
+* The ```collapse``` argument is gets paste to behave like a reducing function.
+```{r}
+paste(letters[1:3], collapse = "")
+paste(letters[1:3], LETTERS[1:3], collapse = " ")
+```
+
+* There are no array variants for paste e.g. row_paste/col_paste. Although it should be possible by using the ```collapse``` argument and the ```apply()``` function.
+```{r}
+paste_array <- function(..., dim, collapse) {
+   lst <- list(...)
+   apply(lst, dim, paste, collapse = collapse)
+}
+```
+
+

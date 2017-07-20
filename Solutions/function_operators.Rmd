@@ -1,0 +1,56 @@
+---
+title: "AdvancedR-functional operators"
+author: "Luke O'Donnell"
+date: "February 5, 2017"
+output: html_document
+---
+
+# 12.1: Behavioural FO's
+
+# Exercises  
+  
+1. Write a FO that logs a time stamp and message to a file every time a function is run.
+```{r}
+## The function will create a file in your current WD
+logger <- function(f, filename, message) {
+   force(f)
+   filename_tmp <- paste(filename, basename(tempfile()), sep = "_")
+   write(paste("created at:", Sys.time()), filename_tmp, append = TRUE)
+   function(..., message = "Default mesage to each call") {
+      write(paste0("used at: ", Sys.time(), ", ", message), filename_tmp, append = TRUE)
+   }
+}
+
+mean2 <- logger(mean, "mean_log")
+mean2(1:4, message = "first invocation")
+mean2(5:8, "second invocation")
+
+```
+2. What does the following function do? What would be a good name for it?
+```{r}
+f <- function(g) {
+   force(f)
+   result <- NULL
+   function(...) {
+      if(is.null(result)) {
+         result <<- g(...)
+      }
+      result
+   }
+}
+runif2 <- f(runif)
+runif2(10)
+runif2(5)
+
+```
+This function stores & will always return the result of the first invocation of function ```g```, no matter what inputs are supplied to subsequent invocations of function ```g```. A good name for the function would be ```initial_call```  
+  
+3. Modify ```delay_by``` so that instead of delaying by a fixed amount of time, it ensures that a certain amount of time has elapsed since the function was last called. That is, if you called ```g <- delay_by(1, f); g(); Sys.sleep(2); g() there shouldn't be an extra delay.  
+  
+  
+```{r}
+delay_by <- function(elapse, f) {
+   force(f)
+   prev_time <- Sys.time()
+}
+```

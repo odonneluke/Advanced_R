@@ -1,0 +1,38 @@
+---
+title: "AdvancedR_Optimising_code"
+output: html_document
+---
+
+# 17.4 Has somebody already solved the problem?
+  
+# Exercises  
+  
+__1. What are faster altternatives to ```lm()```? Which are specifically designed to work with large datasets?__ 
+  
+In the ```base``` package there are the functions called ```lm.fit()``` & ```.lmfit()```. There is also ```Rcpp::fastlm()```, and ```speedglm::speedlm```. Lets test  
+```{r}
+library(RcppEigen)
+library(speedglm)
+x2 <- rep(1:10, 10)
+x3 <- rep(1:10, each = 10)
+true.coef <- c(1, -2, 3)
+Xb <- cbind(1, x2, x3) %*% true.coef
+y <- Xb + rnorm(Xb)
+dat <- data.frame(y,x2,x3)
+dat_matrix <- as.matrix(dat)[inds,]
+str(dat)
+## Model y ~ x2 + x3
+
+B <- 1000 # small, as we will *repeat* in microbenchmark
+
+n <- nrow(dat)
+set.seed(1)
+str(inds <- replicate(B, sample(n,n, replace=TRUE)))
+dat_matrix <- as.matrix(dat)[inds,]
+## Define the regression functions  
+lm(y ~ x2 + x3, data = dat)
+lm.fit(cbind(1, dat_matrix[, 2:3]), dat_matrix[, 1])
+speedlm(y ~ x2 + x3, data = dat)
+speedlm.fit(dat_matrix[, 2:3], dat_matrix[, 1])
+```
+

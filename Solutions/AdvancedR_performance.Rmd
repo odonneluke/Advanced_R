@@ -1,0 +1,312 @@
+---
+title: "AdvancedR-performance"
+output: html_document
+---
+
+# 16.2 Microbenchmarking  
+  
+# Exercises  
+  
+__1. Instead of using ```microbenchmark()```, you could use the built-in function ```system.time()```. But ```system.time()``` is much less precise, so you’ll need to repeat each operation many times with a loop, and then divide to find the average time of each operation, as in the code below.__  
+```{r }
+n <- 1:1e6
+x <- runif(100)
+system.time(for (i in n) sqrt(x)) / length(n)
+system.time(for (i in n) x ^ 0.5) / length(n)
+```
+System measures the time difference in seconds, and the mean time is returned as opposed to median, LQ, UP etc. Looking at the results, it appears that ```sqrt(x)``` is about 10x faster than ```x^0.5```. When ```microbenchmark is used this difference is around about 7-8x
+```{r}
+library(microbenchmark)
+microbenchmark(sqrt(x),
+               x^0.5)
+```
+
+This difference is because ```microbenchmark()``` is more precise than ```system.time()```.
+  
+__2.  Here are two other ways to compute the square root of a vector. Which do you think will be fastest? Which will be slowest? Use microbenchmarking to test your answers.__
+```{r eval = FALSE}
+x ^ (1 / 2)
+exp(log(x) / 2)
+```
+  
+The second expression should be slower ```exp(log(x) / 2)``` as it is making more function calls than the first expression. However from before the ```^``` is slow, so you never know.  
+  
+  
+```{r}
+microbenchmark(x^(1/2),
+               exp(log(x)/2))
+```
+The tests show that ```exp()``` is more performant compared to ```^```.  
+  
+__3.  Use microbenchmarking to rank the basic arithmetic operators (+, -, *, /, and ^) in terms of their speed. Visualise the results. Compare the speed of arithmetic on integers vs. doubles.__  
+  
+```{r}
+(mb_int <- microbenchmark(1L + 1L,
+               1L - 1L,
+               1L * 1L,
+               1L / 1L,
+               1L ^ 1L))
+
+(mb_float <- microbenchmark(1 + 1,
+                            1 - 1,
+                            1 * 1,
+                            1 / 1,
+                            1 ^ 1))
+
+library(data.table)
+library(tidyr)
+
+mb_int <- summary(mb_int)
+mb_float <- summary(mb_float)
+setDT(mb_int)
+setDT(mb_float)
+mb_int <- mb_int[, .(expr, median)]
+mb_float <- mb_float[, .(expr, median)]
+mb_int[, expr := c("+", "-", "*", "/", "^")]
+mb_float[, expr := c("+", "-", "*", "/", "^")]
+setkey(mb_int, expr)
+setkey(mb_float, expr)
+names(mb_int)[2] <- "integer"
+names(mb_float)[2] <- "double"
+## Merge by reference (inner or right outer)
+mb_float[mb_int, integer := integer] ## gather columns into rows
+
+mb_float <- gather(mb_float, "type", "time", 2:3)
+
+## Graph the data
+library(ggplot2)
+
+ggplot(mb_float, mapping = aes(x = expr, y = time, fill = type)) +
+  geom_col(position = "dodge") +
+  ylab("time (ns)")
+  xlab("Arithmetic operations")
+  ggtitle("Benchmark of arithmetic operations")
+```
+Time differences between the arithmetic operators is typically neglible, except for the ```^``` operator, which performs significantly worse for doubles than it does for integers.  
+  
+__4. You can change the units in which the microbenchmark results are expressed with the unit parameter. Use ```unit = "eps"``` to show the number of evaluations needed to take 1 second. Repeat the benchmarks above with the eps unit. How does this change your intuition for performance?__  
+```{r}
+(mb_int <- microbenchmark(1L + 1L,
+               1L - 1L,
+               1L * 1L,
+               1L / 1L,
+               1L ^ 1L,
+               unit = "eps"))
+
+(mb_float <- microbenchmark(1 + 1,
+                            1 - 1,
+                            1 * 1,
+                            1 / 1,
+                            1 ^ 1, 
+                            unit = "eps"))
+mb_int <- summary(mb_int)
+mb_float <- summary(mb_float)
+setDT(mb_int)
+setDT(mb_float)
+mb_int <- mb_int[, .(expr, median)]
+mb_float <- mb_float[, .(expr, median)]
+mb_int[, expr := c("+", "-", "*", "/", "^")]
+mb_float[, expr := c("+", "-", "*", "/", "^")]
+setkey(mb_int, expr)
+setkey(mb_float, expr)
+names(mb_int)[2] <- "integer"
+names(mb_float)[2] <- "double"
+## Merge by reference (inner or right outer)
+mb_float[mb_int, integer := integer] ## gather columns into rows
+
+mb_float <- gather(mb_float, "type", "count", 2:3)
+
+ggplot(mb_float, mapping = aes(x = expr, y = count, fill = type)) +
+  geom_col(position = "dodge") +
+  ylab("Number of evaluations")+
+  xlab("operation")
+```
+It makes the operations that take the longest, seem the fastest.
+  
+#  13.2 Language Performance  
+  
+__1. ```scan()``` has the most arguments (21) of any base function. About how much time does it take to make 21 promises each time scan is called? Given a simple input (e.g., ```scan(text = "1 2 3", quiet = T)```) what proportion of the total run time is due to creating those promises?__  
+```{r}
+library(microbenchmark)
+(scan_bm <- microbenchmark(scan(text = "1 2 3", quiet = T)))
+```
+According to the book adding an extra argument, adds ~20 ns to the total execution time of a function. 
+
+```{r}
+f0 <- function() NULL
+f1 <- function(a = 1) NULL
+f2 <- function(a = 1, b = 1) NULL
+f3 <- function(a = 1, b = 1, c = 1) NULL
+f4 <- function(a = 1, b = 1, c = 1, d = 1) NULL
+f5 <- function(a = 1, b = 1, c = 1, d = 1, e = 1) NULL
+
+microbenchmark(f0(),
+               f1(),
+               f2(),
+               f3(), 
+               f4(),
+               f5())
+
+```  
+Although, running the code myself, it appears that each extra argument adds ~ 45 ns to the total run time. The total runtime for scan is ```summary(scan_bm)$median``` ```attr(summary(scan_bm), "unit")```.  21 x 45 = ```21 * 45``` nano seconds or ```(21 * 45)/10``` micro seconds. ```((21 * 45)/10)/summary(scan_bm)$median``` of the median run time is due to the 21 arguments.  
+  
+__2. Read “Evaluating the Design of the R Language”. What other aspects of the R-language slow it down? Construct microbenchmarks to illustrate.__   
+
+__3. How does the performance of S3 method dispatch change with the length of the class vector? How does performance of S4 method dispatch change with number of superclasses? How about RC?__  
+```{r}
+library(microbenchmark)
+## S3 
+f <- function(x) NULL
+s3 <- function(x) UseMethod("s3")
+s3.a <- function(x) "class a"
+s3.default <- function(x) "unkown class"
+microbenchmark(
+  s3(structure(list(), class = "a")),
+  s3(structure(list(), class = c("a", "b"))),
+  s3(structure(list(), class = c("a", "b", "c"))),
+  s3(structure(list(), class = c("a", "b", "c", "d"))),
+  s3(structure(list(), class = c("a", "b", "c", "d", "e")))
+)
+```
+On average, adding an extra class to an S3 object increases median run time by ~10 microseconds. So method dispatch increases by 10 microseconds, when a new class is assigned to an object.
+```{r}
+## S4
+
+setClass("Animal", slots = list(type = "character"))
+setClass("Person", slots = list(name = "character", species = "Animal"), contains = "Animal")
+setClass("Employee", slots = list(boss = "Person"), contains = "Person")
+
+get_species <- function(a) "No species found"
+setGeneric("get_species")
+setMethod("get_species", c(a = "Animal"), function(a) {a@type})
+setMethod("get_species", c(a = "Person"), function(a) { a@species@type})
+
+microbenchmark({giraffe <- new("Animal", type = "Giraffe")})
+microbenchmark(human <- new("Animal", type = "Human"))
+microbenchmark(Luke <<- new("Person", name = "Luke", species = human))
+microbenchmark(Rory <<- new("Employee", name = "Rory", species = human, boss = Luke))
+
+
+get_species(giraffe)
+get_species(Luke)
+get_species(Rory)
+## List out all of the classes an object inherits from
+is(giraffe)
+is(Luke)
+is(Rory)
+microbenchmark(get_species(NA),
+               get_species(giraffe),
+               get_species(Luke),
+               get_species(Rory))  
+
+```
+Class length does not appear to have a significant effect on method dispatch for S4 objects
+```{r}
+library(microbenchmark)
+## RC
+Animal <- setRefClass("Animal", fields = list(type = "character"),
+            methods = list(
+              get_species = function() type
+            ))
+elephant <- Animal$new(type = "Elephant")
+elephant$type
+elephant$get_species()
+human <- Animal$new(type = "Human")
+human$get_species()
+Person <- setRefClass("Person", fields = list(name = "character", species = "Animal"), contains = "Animal",
+                      methods = list(get_species = function() species$type))
+Luke <- Person$new(name = "Luke", species = human)
+Luke$get_species()
+
+
+Employee <- setRefClass("Employee", fields = list(boss = "Person"), contains = "Person",
+                      methods = list(get_species = function() boss$species))
+Rory <- Employee$new(name = "Rory", boss = Luke, species = human)
+Rory$get_species()
+
+
+microbenchmark(human$get_species(),
+               Luke$get_species(),
+               Rory$get_species())
+```  
+There is a large increase from one class to two classes, but the increase is smaller thereafter
+__4. What is the cost of multiple inheritance and multiple dispatch on S4 method dispatch?__  
+```{r}
+
+```  
+__5. Why is the cost of name lookup less for functions in the base package?__  
+  
+  
+# 13.3 Implementations performance  
+  
+__1. The performance characteristics of ```squish_ife()```, ```squish_p()```, and ```squish_in_place()``` vary considerably with the size of x. Explore the differences. Which sizes lead to the biggest and smallest differences?__  
+```{r}
+library(microbenchmark)
+x_1 <- runif(1, -1.5, 1.5)
+x_10 <- runif(10, -1.5, 1.5)
+x_100 <- runif(100, -1.5, 1.5)
+x_1000 <- runif(1e3, -1.5, 1.5)
+x_10000 <- runif(1e4, -1.5, 1.5)
+x_big <- runif(1e6, -1.5, 1.5)
+
+squish_ife <- function(x, a, b){
+  ifelse(x <= a, a, ifelse(x >= b, b, x))
+}
+squish_p <- function(x, a, b) {
+  pmax(pmin(x, b), a)
+}
+
+squish_in_place <- function(x, a, b) {
+  x[x <= a] <- a
+  x[x >= b] <- b
+}
+
+microbenchmark(squish_ife(x_1, -1, 1),
+               squish_p(x_1, -1, 1),
+               squish_in_place(x_1, -1, 1))
+
+microbenchmark(squish_ife(x_10, -1, 1),
+               squish_p(x_10, -1, 1),
+               squish_in_place(x_10, -1, 1))
+
+microbenchmark(squish_ife(x_100, -1, 1),
+               squish_p(x_100, -1, 1),
+               squish_in_place(x_100, -1, 1))
+
+microbenchmark(squish_ife(x_1000, -1, 1),
+               squish_p(x_1000, -1, 1),
+               squish_in_place(x_1000, -1, 1))
+
+microbenchmark(squish_ife(x_10000, -1, 1),
+               squish_p(x_10000, -1, 1),
+               squish_in_place(x_10000, -1, 1))
+microbenchmark(squish_ife(x_big, -1, 1),
+               squish_p(x_big, -1, 1),
+               squish_in_place(x_big, -1, 1))
+```  
+When x is small (<10 elements), ```squish_in_place``` is the fastest, ```squish_ife``` is next and ```squish_p``` is the slowest. ```squish_p``` and ```squish_ife``` are similiar in speed at this size.  
+  
+From sizes 1-100 the time that it takes to execute ```squish_p``` does not very by much (suggesting that other factors control the speed of the function at this size.) 
+  
+As the size of x increases (>100 elements) the order of function speed differs ```squish_in_place``` is still fastest, but ```squish_p``` is now considerably faster than ```squish_ife```.  
+  
+The execution time difference between the 3 functions is correlated with the size of x. the greatest time differences are seen when x is very large. the samllest time difference is seen when x is small
+__2. Compare the performance costs of extracting an element from a list, a column from a matrix, and a column from a data frame. Do the same for rows.__ 
+```{r}
+ls <- list(1:1e6)
+mat <- matrix(1:1e6, nrow = 10000)
+df <- as.data.frame(mat)
+
+microbenchmark(ls[sample(seq_len(length(ls)), 1)],
+               mat[, sample(seq_len(ncol(mat)), 1)],
+               df[, sample(seq_len(ncol(df)), 1)])
+
+microbenchmark(ls[10],
+               mat[, 10],
+               df[, 10])
+
+microbenchmark(ls[10],
+               mat[10,],
+               df[10,])
+
+```

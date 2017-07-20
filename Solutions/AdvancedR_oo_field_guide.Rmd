@@ -1,0 +1,412 @@
+---
+title: "Advance R - OO field guide"
+author: "Luke O'Donnell"
+date: "September 23, 2016"
+output: html_document
+---
+
+__Chapter 7 OO field guide__
+=============================
+
+* R has three object oriented systems, plus the base types (logical, integer, double, character, raw, complex, functions, environments)
+ 1. __S3__  (generic-function OO). computations are carried out via methods, a special type of function called a __generic function__ decides which method to call. S3 has no formal defintion of classes
+ 2. __S4__: Similiar to S3, but with formal class definitions. These describe the representation and inheritance for each class, and has special helper functions for defining generics and methods. S4 also has special dispatch, which means that generic functions can pick methods based on the class of any number of arguments, not just one
+ 3. __Reference classes (RC)__ (message-passing OO): Methods belong to classes, not functions (different to S3 and S4). `$` is used to seperate objects and methods. RC objects are modified in place (mutable), this again differs from S3 and S4 objects which immutable (use copy-on-modify semantics).  
+  4. __base types__: The internal C-level types taht underlie the other OO systems.
+ 
+ All objects have a class and methods.  
+   
+* A class defiens the behaviour of objects by describing their attributes and their relationship to other classes  
+* Methods are functions that behave differently depending on the class of their input.
+  
+  
+  
+```{r include = FALSE}
+library(pryr)
+
+```
+## __Exercises__
+
+1. __How do you tell what OO system (base, S3, S4, or RC) an object is associated with?__  
+  
+* for all of the above you can use `pryr::otype()` or `pryr::ftype()`
+* base: If `is.object()` returnes `FALSE`
+* S3: If `is.object() & !isS4()` returns `TRUE`
+* S4: if `isS4()` returns `TRUE`
+* RC: If `is(obj, "RefClass")` returns `TRUE`
+  
+2. __How do you determine the base type (like integer or list) of an object?__ 
+  
+* Use the `typeof()` function to determine the base type of an object 
+  
+3. __What is a generic function?__ 
+  
+* A generic function is  a function that calls specific method for S3 or S4 objects depending on their class. In S3 and S4 object systems methods belong to generic functions, not classes unlike in other OOP systems (RC).  
+  
+4. __What are the main diﬀerences between S3 and S4? What are the main diﬀerences between S4 & RC?__ 
+  
+* S4 is more formal (classes are formally defined, describing the number and names of fields and their class) than S3 and supports multiple dispacth and multiple inheritance.
+* RC objects are mutable (modified in place), and methods belong to classes not generic functions.
+  
+## __ 7.1 Base types__  
+  
+* To see if an object is a pure base type (doesn't also have S3, S4, or RC), check that `is.object(x)` is `FALSE`  
+  
+## __7.2 S3__  
+### 7.2.1 Recognising objects, generic functions, and methods   
+  
+The 'best' way to test if an object is an S3 object in base R is to use:  
+* `is.object(x) & !is.S4(x)` or you can use `pryr::otype()`  
+  
+In S3 methods belong to functions (generic functions), not objects or classes  
+* In base R `UseMethod()` is the function that figures out the correct method to call (known as __method dispatch__). Any function that contains this function in it's source code is an S3 generic function. 
+* `pryr::ftype()` describes the object system associated with a function (if any).  
+* __internal generics__ are functions that do method dispatch in C code, as they are implemented in C (`sum()`, `[`, etc).  
+  
+The job of an S3 generic is to call the right method, given the objects class. S3 methods are of form `generic.class()`. For example the date method for the `mean()` generic is `mean.Date()`
+  
+You can see all the methods that belong to a generic function (in the base package) with the `methods()` function.  
+  
+### 7.2.2 Deﬁning classes and creating objects    
+  
+* To create an S3 object, you only need to add a class attribute to a base object (either during object creation with the `structure()` function, or by modifying a pre-existing base object with `class(x)<-`).  
+  
+* Most S3 classes provide a constructor function, to craete the specific object (e.g. `data.frame()`, `factor()`)  
+  
+### 7.2.3 Creating new methods and generics 
+  
+  
+###__7.2 Exercises__  
+  
+__1. Read the source code for `t()` and `t.test()` and conﬁrm that `t.test()` is an S3 generic and not an S3 method. What happens if you create an object with class test and call `t()` with it?__  
+   
+* Both `t()` and `t.test()` are generic functions  as they contain the `UseMethod()` function within their source code, i.e `t.test()` is not the test method for the  for the `t()` generic.  
+  
+  
+```{r}
+ftype(t)
+ftype(t.test)
+``` 
+* You can see the methods for `t()` and `t.test()` with the `methods()` function
+
+```{r}
+methods(t)
+methods(t.test)
+```
+* To create an object with class test do  
+ 
+```{r}
+x <- structure(1:5, class = "test")
+t(x)
+```
+
+* when a generic function does not have a method for an object class (i.e the class is unknown), the generics default method is called (if a default method exists. Note all base generics have default methods).
+__2. What classes have a method for the Math group generic in base R? Read the source code. How do the methods work?__  
+ * The following classes have a default for the Math group generic  
+   
+ 
+```{r}
+methods(Math)
+```   
+* In the source code for the `Math()` function, there exists another function called `standardGeneric()`. Groups (and functions belonging to the group. They are all base object types) are not objects in base R, but methods can be supplied for them. The function `abs()` has group generic `Math()`. In selecting a method for `abs()` methods for `Math()` become candidates if no corresponding candidates exist for `abs()`.  
+  
+* Members in the Math group generic, dispatch on the class of the supplied argument. (method used is determined by the class of the supplied object.) 
+  
+__3. R has two classes for representing date time data, POSIXct and POSIXlt, which both inherit from POSIXt. Which generics have diﬀerent behaviours for the two classes? Which generics share the same behaviour?__  
+  
+* Generics that differ between POSIXct and POSIXlt
+```{r}
+t <- methods(class = "POSIXt")
+gen_t <- attr(t, "info")$generic
+ct <- methods(class = "POSIXct")
+gen_ct <- attr(ct, "info")$generic
+lt <- methods(class = "POSIXlt")
+gen_lt <- attr(lt, "info")$generic
+
+
+## Generics that differ 
+(diff_gen <- unique(c(gen_lt, gen_ct)))
+```
+
+* Generics that are the same for POSICct and POSIXlt (i.e. A method only exists for POSIXt class objects)
+```{r}
+## Generics that are the same (i.e. they inherit from POSIXt)
+(same_gen <- gen_t[!(gen_t %in% diff_gen)])
+```
+
+__4. Which base generic has the greatest number of deﬁned methods?__  
+  
+ 
+```{r}
+objs <- mget(ls("package:base"), inherits = TRUE) 
+funtype <- sapply(objs, ftype)
+ft.index <- sapply(funtype, function(x) length(x) > 1 & x[2] == "generic") 
+generic_funs <- objs[ft.index]
+
+objs_method <- sapply(names(generic_funs), methods)
+methods_num <- sapply(objs_method, length)
+max_methods <- which(methods_num == max(methods_num))
+names(methods_num[max_methods])
+
+``` 
+The generic `r names(methods_num[max_methods])` has `r methods_num[max_methods]` methods.  
+   
+  
+## __7.3 S4__   
+  
+Differences to S3:  
+  
+* Classes have formal definitions which describe their fields and inheritance structures  
+* Method dispatch can be based on multiple arguments to a function  
+* There is a special `@` operator for extracting slots/fields from an S4 object.  
+  
+* All S4 related code is stored in the methods package.  
+ 
+###  __7.3.1 Recognising objects, generic functiobs, and methods__  
+  
+  
+* To identify an S4 object use `isS4()` or `pryr::otype`. S4 generics and methods can also be identified with the same functions.  
+* The function `is()` lists all the classes that an object inherits from, or returns a logical vector descirbing whether or not an object inherits from a specific class.   
+  
+* The function `getGenerics()` returns a list of all S4 generics.
+* The function `getClasses()` returns a list of all S4 classes.
+* You can list all S4 methods with `showMethods()`.
+  
+### __7.3.2 Defining classes and creating objects  
+  
+To create an S4 class use the `setClass()` function.  
+An S4 class has three key properties:  
+* A __name__. By convetion S4 class names use CamelCase  
+* A named list of __slots__/field, which define the slot name and class (data types and sructure).  
+* A string giving the class or classes it inherits from, or in S$ terms, that it __contains__ 
+* To access the slots in a S4 object use `@` or `slots()`
+  
+#### __7.3.3 Creating new methods and generics__   
+  
+* The `setGeneric()` function can be used to create a generic  
+* the `setMethod()` function can be used to create a Method. It takes the name of the method, the classes the method should be associated with, and a function that implements the method.
+
+### __7.3 Exercises__  
+  
+1. __Which S4 generic has the most methods deﬁned for it? Which S4 class has the most methods associated with it?__   
+  
+```{r}
+library(stats4)
+AllGenerics <- getGenerics()
+str(AllGenerics)
+AllGenerics <- AllGenerics[AllGenerics@package != "Rcpp"]
+test <- sapply(names(AllGenerics), function(x) isS4(get(x)))
+S4generics <- AllGenerics[test]
+S4methods <- sapply(S4generics, methods)
+S4methods_length <- sapply(S4methods, length)
+max_S4method <- which(S4methods_length == max(S4methods_length))
+## Get S4 generic with the most methods
+S4generics[max_S4method]
+```  
+* The S4 generic with the most methods is `r S4generics[max_S4method]` and it has `r unname(max(S4methods_length))` methods  
+  
+2. __What happens if you deﬁne a new S4 class that doesn’t “contain” an existing class? (Hint: read about virtual classes in `?Classes`.)__  
+  
+* A virtual class, is a class for which it is not possible to create objects, but other classes are able to inherit from. The classes that inherit from a virtual class will inherit all of the common methods of the virtual class. So essentially virtual classes can be used to group together other classes that want to share the same programming behaviour/functionality (So you don't have to define the same method twice, for two different classes).  
+  
+It is common to create a virtual class and then have several other distinct classes inherit from and extend it.  
+ 
+1. Methods for the virtual class will apply to any of the classes that inherit from the VC  
+
+2. If a VC has slots they will be common to all classes that extend the VC.  
+  
+3. A slot in a new class can have as its type the virtual calss. This allows slots to be polymorphic (more than one type or class).  
+  
+  
+#### Example of behaviour 1  
+Suppose that we want to define a class that represents a dendrogram. Each node in a dendrogram has three values associated with it. The height, the left node and the right node. Terminal nodes are different they have a height and a value (possibly an instance of a yet another class). 
+  
+One way to implement this structure is to use a virtual class calleddendNode, say. Then there are two classes that we can define that extend this virtual class; terminal and non-terminal nodes.  
+  
+  
+  
+  
+  
+```{r}
+setClass("dendNode")
+## Create two classes that inherit from dendNode
+setClass("dnode", representation(left = "numeric", right = "numeric", height = "numeric"),
+         contains = "dendNode")
+
+setClass("tnode", representation(height = "numeric", value = "numeric" , label = "character"),
+         contains  = "dendNode")
+
+##Create a generic and a method for dendNode
+setGeneric(name = "squareHeight", def = function(object) {standardGeneric("squareHeight")})
+
+setMethod(f = "squareHeight", "dendNode",
+          function(object) {
+           object@height <- object@height^2
+           return(object)
+          })
+
+a <- new("dnode", left = 10, right = 6, height = 10)
+b <- new("tnode", height = 6, value = 3, label = "terminal")
+squareHeight(a)
+squareHeight(b)
+```
+  
+    
+#### Example of behaviour 3 
+
+A situation that seems to arise frequently is the desire to allow a slot in an object to either contain a list
+or to be NULL(). Since the objectNULL() is not itself a list these cannot ordinarily sharea slot.
+  
+To overcome this we could create a new virtual class that extends both the list class and the NULL() class
+```{r}
+setClass("listOrNULL")
+
+setClassUnion("listOrNULL", members = c("list", "NULL"))
+
+setClass("c1", representation(value = "listOrNULL"))
+
+(y <- new("c1", value = NULL))
+(x <- new("c1", value = list(a = 10)))
+```
+  
+      
+3. __What happens if you pass an S4 object to an S3 generic? What happens if you pass an S3 object to an S4 generic? (Hint: read `?setOldClass` for the second case.)__  
+```{r}
+library(qlcMatrix)
+library(pryr)
+## create S4 object and pass it to an S3 generic
+data("bibles")
+words <- splitText(bibles$eng)$runningWords
+sentences <- bibles$eng
+sentences <- sentences[1:100]
+
+sim <- sim.strings(sentences)
+sim_t <- t(sim)
+## Create S3 object and pass it to an S4 generic
+```
+
+* When a S4 class object is passed to an S3 generic (for which a S4 method does not exist)
+  
+## __7.4 Reference Classes__  
+  
+Differences to S3 and S4:  
+  
+* Methods belong to objects, not functions  
+* RC objects are mutable: the usual r copy-on-modify semantics do not apply  
+  
+RC are a special S4 class that wraps around an enviroment.  
+  
+### __7.4.1 Defining classes and creating objects_  
+  
+* The function `setRefClass()` is used to create RC. The only required argument is a __name__. 
+* Use the object returned by `setRefClass()` to create new RC objects  
+```{r}
+Account <- setRefClass("Account")
+Account$new()
+```  
+  
+* `setRefclass()` also accepts a list of name-class pairs that define class __fields__ (equivalent of S4 slots).  
+* you can get and set field value with `$`
+
+```{r}
+Account <- setRefClass("Account",
+                       fields = list(balance = "numeric"))
+a <- Account$new(balance = 100)
+a$balance
+a$balance <- 300
+a$balance
+```  
+
+* The `copy()` method allows you to make a copy of the RC object  
+```{r}
+b <- a
+c <- a$copy()
+a$balance <- 0
+a$balance
+b$balance ## Rc objects are mutable, they are not copied on modify
+c$balance
+```  
+* RC __methods__ are associated with a class and can modify its fields in place. You access the value of fields with their name, and modify them with `<<-`  
+```{r}
+Account <- setRefClass("Account",
+                       fields = list(balance = "numeric"),
+                       methods = list(withdraw = function(x) {
+                         balance <<- balance - x
+                       },
+                       deposit = function(x){
+                         balance <<- balance + x
+                       }
+                       ))
+                       
+a <- Account$new(balance = 100)
+## You call a RC method in the same way as you access a field
+a$deposit(50)
+a$balance
+a$withdraw(100)
+a$balance
+
+
+```  
+
+* The final argument to `setRefClass()` is contains. This is the name of the parent class to inherit from
+
+### __7.4.2 Recognising objects and methods__  
+  
+* There are two ways to recognise RC objects and methods
+1. `(is(obj, "refClass"))` will return `TRUE`
+2. `pryr::otype()` will return "RC"
+  
+### __7.4.3 Method dispatch__
+  
+* When you call `x$f()`, R will look for a method f for the class x, then in its parent, then its parents parent, and so on.
+
+### __7.4 Exercises__  
+  
+1. __Use a ﬁeld function to prevent the account balance from being directly manipulated. (Hint: create a “hidden” .balance ﬁeld, and read the help for the ﬁelds argument in `setRefClass()`.)__  
+
+```{r}
+## Method for if variable name begins with .name
+## Create a virtual RC class private....
+Private <- setRefClass("Private")
+
+## Override the `$<-` method for RC objects with class private. To stop
+## any fields prefixed by a period from being directly changed with the `$<-` function
+## i.e. only change balance using the withdraw or deposit method
+
+setMethod("$<-", "Private",
+          function(x, name, value) {
+            if(grepl("^\\.", name)) {
+              warning("This is a private field, and cannot be overriden!")
+              } else selectMethod("$", "envRefClass")(x, name, value)
+          } )
+Account <- setRefClass("Account",
+                       fields = list(.balance = "numeric"),
+                       contains = "Private",
+                       methods = list(withdraw = function(x) {
+                         .balance <<- .balance - x
+                         
+                       },
+                       deposit = function(x){
+                         .balance <<- .balance + x
+                         
+                       }
+                       ))
+
+a <- Account$new(.balance = 100)
+a$.balance
+
+
+(a$.balance <- 10)
+
+a$deposit(10)
+a$.balance
+
+``` 
+  
+2. __I claimed that there aren’t any RC classes in base R, but that was a bit of a simpliﬁcation. Use `getClasses()` and ﬁnd which classes `extend()` from `envRefClass`. What are the classes used for? (Hint: recall how to look up the documentation for a class.)__
+  
+  
+```{r}
+
+```
+

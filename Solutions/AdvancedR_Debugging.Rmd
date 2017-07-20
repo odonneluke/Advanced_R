@@ -1,0 +1,88 @@
+---
+title: "Advanced R - Debugging"
+author: "Luke O'Donnell"
+date: "November 7, 2016"
+output: html_document
+---
+
+# __Quiz:__   
+  
+__1. How can you ﬁnd out where an error occured?__  
+* Use the `tracback()` function.  
+* This returns the call stack form top to bottom. The last call that triggered the error will be at the top of the stack.
+* `traceback()` shows where the error occured, not hy
+__2. What does browser() do? List the ﬁve useful single-key commands that you can use inside of a browser() environment.__  
+
+__3. What function do you use to ignore errors in block of code?__  
+
+__4. Why might you want to create an error with a custom S3 class?__  
+
+  
+# __9.1 Debugging techniques__  
+  
+### The four steps to debugging.  
+  
+1. __Realise that you have a bug__  
+  
+* You can't fix a bug until you know it exists. Automated testing is important when producing high quality code.  
+* Find more about automated testing at  
+  
+2. __Make it repeatable__  
+* Once you've identified that you have a bug, you need to be able to repeat it on demand. 
+* Being able to repeat the bug on demand will enable to isolate the part of your code that causes the bug
+3. __Figure out where it is__  
+* Generate hypotheses, design experiments to test them, and record your results. 
+* Generally you will begin with a large block of code that you know causes the error and then slowly whittle it down to get the smallest possible snippet that still causes the error.
+* Binary search is useful for this. To do this you repeatedly remove half the code until you find the causes
+4. __Fix it and test it__  
+* after making the fix, it needs to be tested, to ensure you haven't intriduced any new bugs to the process.
+* create test data, and carefully record the correct output, and check against any inputs that previously failed.  
+  
+# __9.2 Debugging tools__  
+  
+## __9.2.1 Determining the sequence of calls__  
+  
+* The `tracback()` function lists the sequence of calls that lead to an error. This is also known as the __call stack__, the sequence of calls that lead up to an error.
+* `traceback()` shows you where an error occured but not why it occured.  
+  
+## __9.2.2 Browsing an error__  
+* Selecting the "Rerun with Debug" tool, reruns the command that created the error, pausing execution where the error occurred.
+* You're now in an interactive state and you can interact with any of object defined there.
+* There are a few special commands that you can use in debug mode.  
+  
+1. Next, n: executes the next step in the fnction
+2. Step into, s: works like next, but if the next step is a function, it will step into that function so you can walk through each line.
+3. Finish, f: finishes execution of the current loop or function.  
+4. Continue, c: leaves interactive debugging and continues regular execution of the function. This is mainly to check if you have fixed the error
+5. Stop, Q: stops debugging, terminates the function, and returns to the global workspace.  
+  
+* The function most similiar to Rstudio's debug tool is `browser()`: this will start an interactive console in the environment where the error occurred.  
+  
+* `recover()` is a step up from `browser()`, as it allows you to enter the environment of any of the calls in the call stack. This is useful because often the root cause of the error is a number of calls back.  
+  
+  
+  
+# __9.3 Condition handling__   
+  
+  
+## __9.3.1 Ignore errors with try__
+  
+* `try()` gives you the ability to continue execution even when an error occurs. Normally when a function throws an error it will terminate immediately, and return no value.  
+* If you wrap the statement that creates the error in `try()`, the error message will be printed but execution will continue.  
+* error messages can be suppressd with `try(..., silent = TRUE)`  
+* To pass larger blocks of code to `try()`, wrap them in `{}`.  
+* If the statement wrapped in the `try()` returns an error, an invisible object of class "try-error" is returned
+
+## __9.3.2 Handle conditions with tryCatch()__  
+  
+* `tryCatch()` lets you specify __handler__ functions that control what happens when a condition is signalled. 
+* `trycatch()` is a general tool for handling conditions: in addtion to errors, you can take different actions for warnings, messages and interrupts.
+* Interupts are generated when the user attempts to terminate the programme.  
+   
+* with `tryCatch()` yo map conditions to __handlers__, named functions that are called with the condition as an input. When a condition is signalled, `tryCatch()` will call the first handler whose name matches one of the classes of the condition. The only useful built-in names are `error`, `warning`, `message`, `interrupt` and the catch-all `condition`.
+* A handler function can do anything, but typically it will either return a value or create a more informative error message.  
+  
+## __9.3.3 withCallingHandlers()__  
+
+* `withCallingHandlers()` is a variant of `tryCatch()` that runs its handlers in a different context. It's rarely needed.
+  
